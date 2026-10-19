@@ -42,20 +42,24 @@ def discovery(value, tool="list_threads", requested_cursor=None, caller_host=Non
     pinned = data.get("pinnedThreads", []) if tool == "list_threads" else []
     if not isinstance(rows, list) or not isinstance(pinned, list):
         raise HistoryError("thread list is missing")
-    found = {}
+    found, other = {}, {}
     for row in pinned + rows:
-        if not isinstance(row, dict) or row.get("kind", "codex") != "codex":
-            continue
+        if not isinstance(row, dict):
+            raise HistoryError("invalid discovery row")
         if not isinstance(row.get("id"), str) or not row["id"]:
             raise HistoryError("discovery row lacks a thread id")
+        kind = row.get("kind", "codex")
+        if not isinstance(kind, str) or not kind:
+            raise HistoryError("invalid returned kind")
         host = row.get("hostId")
-        if host is None and tool == "list_archived_threads":
+        if host is None and tool == "list_archived_threads" and kind == "codex":
             host = caller_host  # Proven caller scope only; never assume 'local'.
         if host is not None and (not isinstance(host, str) or not host):
             raise HistoryError("invalid returned host")
-        key = (host, row["id"])
-        found[key] = {"kind": "codex", "host_id": host, "thread_id": row["id"],
-                      "title": row.get("title"), "status": "discovered_unread"}
+        key = (kind, host, row["id"])
+        target = found if kind == "codex" else other
+        target[key] = {"kind": kind, "host_id": host, "thread_id": row["id"],
+                       "title": row.get("title"), "status": "discovered_unread"}
     next_cursor = data.get("nextCursor")
     # list_threads currently has no pagination contract. Archive EOF applies only
     # to this caller/tool scope, and only this page was inspected by this helper.
@@ -65,6 +69,8 @@ def discovery(value, tool="list_threads", requested_cursor=None, caller_host=Non
         and next_cursor is None and data.get("partial_results") is not True \
         and data.get("hasMore") is not True
     return {"sources": list(found.values()), "returned_unique": len(found),
+            "other_sources": list(other.values()), "other_returned_unique": len(other),
+            "all_returned_unique": len(found) + len(other),
             "account_enumeration_complete": "unknown", "account_total": "unknown",
             "page_terminal": terminal, "requested_cursor": requested_cursor,
             "next_cursor": next_cursor,
@@ -73,7 +79,7 @@ def discovery(value, tool="list_threads", requested_cursor=None, caller_host=Non
 
 def _limited(value):
     return isinstance(value, dict) and any(value.get(k) is True for k in
-        ("truncated", "isTruncated", "partial", "partial_results", "incomplete"))
+        ("truncated", "isTruncated", "partial", "partial_results", "incomplete", "content_omitted"))
 
 
 def _turn_date(turn):
@@ -158,30 +164,37 @@ def normalize_reads(reads, thread_id, host_id):
                     continue  # Historical tools, commands and reasoning are never executed.
                 if _limited(item):
                     reasons.add("text_truncated_or_partial")
+                message_limited = _limited(item) or _limited(turn) or _limited(data) or _limited(page)
+                attachments = False
                 role = "user" if item["type"] == "userMessage" else "assistant"
                 if role == "user":
                     content = item.get("content")
                     if not isinstance(content, list):
                         reasons.add("message_text_unknown")
-                        continue
+                        message_limited = True
+                        content = []
                     text_parts = []
                     for block in content:
                         if not isinstance(block, dict):
                             raise HistoryError("invalid user content block")
                         if _limited(block):
                             reasons.add("text_truncated_or_partial")
+                            message_limited = True
                         if block.get("type") == "text" and isinstance(block.get("text"), str):
                             text_parts.append(block["text"])
                         elif block.get("type") == "text":
                             reasons.add("message_text_unknown")
+                            message_limited = True
                         else:
                             reasons.add("attachments_not_read")
+                            attachments = True
                     text = "\n".join(text_parts)
                 else:
                     text = item.get("text")
                     if not isinstance(text, str):
                         reasons.add("message_text_unknown")
-                        continue
+                        message_limited = True
+                        text = ""
                 if not isinstance(item.get("id"), str) or not item["id"]:
                     raise HistoryError("message identity missing; do not invent it")
                 message = {"kind": "codex", "host_id": host_id, "thread_id": thread_id,
@@ -189,10 +202,24 @@ def normalize_reads(reads, thread_id, host_id):
                     "text": text, "phase": item.get("phase"), "recorded_at_utc": recorded,
                     "date_basis": date_basis, "exact_message_timestamp": None,
                     "confirmation_date": None, "event_date": None}
+                # Keep per-record limits through later filtering/counting. An
+                # empty truncated body is unread, never evidence of no content.
+                message["read_status"] = ("unread" if not text.strip() and message_limited
+                                          else "partial" if message_limited else "text_returned")
+                message["truncation_observed"] = message_limited
+                message["attachments_not_read"] = attachments
                 old = identities.get(item["id"])
                 if old is not None:
-                    if old != message:
+                    # Different page-level limits on an overlap do not change
+                    # its identity/content. Conservatively retain either limit.
+                    limits = {"read_status", "truncation_observed", "attachments_not_read"}
+                    if {k: v for k, v in old.items() if k not in limits} != \
+                            {k: v for k, v in message.items() if k not in limits}:
                         raise HistoryError("same message id has conflicting content; retain both receipts for review")
+                    old["truncation_observed"] |= message["truncation_observed"]
+                    old["attachments_not_read"] |= message["attachments_not_read"]
+                    if old["truncation_observed"]:
+                        old["read_status"] = "partial" if text.strip() else "unread"
                     duplicates += 1
                     continue
                 identities[item["id"]] = message

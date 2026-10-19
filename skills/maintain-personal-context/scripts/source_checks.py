@@ -94,7 +94,7 @@ def check_read(row):
         check["target_completeness"] = completeness
     # Refusal is not permission to try another path. A mismatched old lookup
     # that never addressed the target is not a refusal by that target.
-    if status != "permission_denied":
+    if status not in {"permission_denied", "user_excluded", "experiment_excluded"}:
         if kinds[0] != kinds[1]:
             status = "discovered_unread"
             reasons.append("读取入口与来源类型不一致，尚未验证指定来源")

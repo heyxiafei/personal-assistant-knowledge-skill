@@ -1,0 +1,150 @@
+{
+  "fictional": true,
+  "source_records": [
+    {
+      "id": "m1",
+      "source_id": "fictional-garden-chat",
+      "disposition": "retained",
+      "text": "助手报告：春季手册已交付。用户尚未验收。"
+    },
+    {
+      "id": "m2",
+      "source_id": "fictional-garden-chat",
+      "disposition": "retained",
+      "text": "“所有成员完成培训”尚不能确认；名单仍待复核。"
+    },
+    {
+      "id": "m3",
+      "source_id": "fictional-garden-chat",
+      "disposition": "retained",
+      "text": "旧排班草案“苗版”已撤回，不再推荐；新“叶版”仍待决定。"
+    },
+    {
+      "id": "m4",
+      "source_id": "fictional-garden-chat",
+      "disposition": "retained",
+      "text": "收到，我会继续核对。"
+    }
+  ],
+  "sections": [
+    {
+      "id": "delivery",
+      "source_id": "fictional-garden-chat",
+      "record_ids": [
+        "m1"
+      ],
+      "status": "read",
+      "scope": "complete returned message",
+      "atoms": [
+        {
+          "id": "handbook",
+          "role": "results",
+          "required_terms": [
+            "助手报告",
+            "春季手册",
+            "已交付",
+            "尚未验收"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "training",
+      "source_id": "fictional-garden-chat",
+      "record_ids": [
+        "m2"
+      ],
+      "status": "read",
+      "scope": "complete returned message",
+      "atoms": [
+        {
+          "id": "training-state",
+          "role": "projects",
+          "required_terms": [
+            "尚不能确认",
+            "待复核"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "versions",
+      "source_id": "fictional-garden-chat",
+      "record_ids": [
+        "m3"
+      ],
+      "status": "read",
+      "scope": "complete returned message",
+      "atoms": [
+        {
+          "id": "schedule",
+          "role": "projects",
+          "required_terms": [
+            "苗版",
+            "已撤回",
+            "不再推荐",
+            "叶版",
+            "仍待决定"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "acknowledgement",
+      "source_id": "fictional-garden-chat",
+      "record_ids": [
+        "m4"
+      ],
+      "status": "read",
+      "scope": "complete returned message",
+      "excluded_reason": "Only acknowledges the review in m1; no new delivery, acceptance or personal fact."
+    }
+  ],
+  "projections": [
+    {
+      "role": "results",
+      "page_ref": "fictional-results",
+      "readback": true,
+      "source_ids": [
+        "fictional-garden-chat"
+      ],
+      "atom_ids": [
+        "handbook"
+      ],
+      "text": "助手报告：春季手册已交付。用户尚未验收。"
+    },
+    {
+      "role": "projects",
+      "page_ref": "fictional-training",
+      "readback": true,
+      "source_ids": [
+        "fictional-garden-chat"
+      ],
+      "atom_ids": [
+        "training-state"
+      ],
+      "text": "培训状态：尚不能确认，名单待复核。\n\n> “所有成员完成培训”尚不能确认；名单仍待复核。"
+    },
+    {
+      "role": "projects",
+      "page_ref": "fictional-schedule",
+      "readback": true,
+      "source_ids": [
+        "fictional-garden-chat"
+      ],
+      "atom_ids": [
+        "schedule"
+      ],
+      "text": "旧排班草案“苗版”已撤回，不再推荐；新“叶版”仍待决定。"
+    }
+  ],
+  "quotations": [
+    {
+      "id": "q1",
+      "record_id": "m2",
+      "text": "“所有成员完成培训”尚不能确认；名单仍待复核。",
+      "context": "“所有成员完成培训”尚不能确认；名单仍待复核。",
+      "page_ref": "fictional-training"
+    }
+  ]
+}

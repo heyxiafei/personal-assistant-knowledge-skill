@@ -31,6 +31,16 @@ def one(**kwargs):
     return {"version": 1, "records": [r]}
 
 
+def observed(bundle):
+    """Synthetic user evidence for tests which replace an unknown fact."""
+    r = bundle["records"][0]
+    r["text"] = "我确认：" + r["text"].rstrip("。")
+    r["assertion"] = {"state": "observed", "author_role": "user",
+                      "source": copy.deepcopy(r["sources"][0]),
+                      "source_text": r["text"], "statement": r["text"]}
+    return bundle
+
+
 class ContextTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -79,11 +89,11 @@ class ContextTests(unittest.TestCase):
         first = fixture("first-profile.json")
         unknown = copy.deepcopy(first["records"][-1])
         self.apply(first)
-        answer = one(id="collaboration-answer", category=unknown["category"],
+        answer = observed(one(id="collaboration-answer", category=unknown["category"],
                      text="可协作资源：用户明确提供了一份虚构设计资源清单。",
                      record_date="2026-09-03", confirmed_on="2026-09-03",
                      confirmation="虚构用户指令F：保存这份资源答案",
-                     supersedes=[unknown["id"]])
+                     supersedes=[unknown["id"]]))
         self.assertEqual(self.apply(answer)["status"], "committed")
         byid = {r["id"]: r for r in self.records()}
         old = byid[unknown["id"]]
@@ -205,8 +215,8 @@ class ContextTests(unittest.TestCase):
         first = fixture("first-profile.json")
         unknown = copy.deepcopy(first["records"][-1])
         self.apply(first)
-        self.apply(one(id="known-resource-answer", category=unknown["category"],
-                       text="一项明确提供的虚构协作资源。", supersedes=[unknown["id"]]))
+        self.apply(observed(one(id="known-resource-answer", category=unknown["category"],
+                       text="一项明确提供的虚构协作资源。", supersedes=[unknown["id"]])))
         before = store.inventory(self.root)
         replay = dict(unknown, id="unknown-replayed", record_date="2026-09-04")
         result = self.apply({"version": 1, "records": [replay]})
@@ -267,8 +277,8 @@ class ContextTests(unittest.TestCase):
 
     def test_unknown_history_remains_readable_after_a_second_correction(self):
         self.apply(fixture("first-profile.json"))
-        first = one(id="resource-answer", category="resources-collaboration",
-                    text="已确认的一份虚构资源清单。", supersedes=["collaboration-unknown"])
+        first = observed(one(id="resource-answer", category="resources-collaboration",
+                    text="已确认的一份虚构资源清单。", supersedes=["collaboration-unknown"]))
         self.apply(first)
         second = one(id="resource-answer-corrected", category="resources-collaboration",
                      text="经明确更正后的虚构资源清单。", supersedes=["resource-answer"])
@@ -691,6 +701,88 @@ class InstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             installer.install(str(alias / "nested/skills"))
         self.assertFalse((outside / "nested/skills").exists())
+
+    def test_source_file_and_directory_symlinks_rejected_without_reading_external_files(self):
+        import shutil
+        base = Path(self.tmp.name).resolve()
+        outside = base / "invented-external"
+        outside.mkdir()
+        sentinel = outside / "fixture.txt"
+        sentinel.write_text("FICTIONAL_EXTERNAL_FILE_MUST_NOT_BE_COPIED")
+        before = sentinel.read_bytes()
+        original_copyfile = shutil.copyfile
+        def guarded_copy(src, dst, *args, **kwargs):
+            resolved = Path(src).resolve()
+            if resolved == sentinel or outside in resolved.parents:
+                raise AssertionError("external fixture must not be copied")
+            return original_copyfile(src, dst, *args, **kwargs)
+        for kind in ("file", "directory"):
+            with self.subTest(kind=kind):
+                source = base / ("source-" + kind)
+                source.mkdir()
+                (source / "SKILL.md").write_text("fictional source stub")
+                (source / "linked").symlink_to(sentinel if kind == "file" else outside,
+                                              target_is_directory=kind == "directory")
+                dest = base / ("target-" + kind) / "skills"
+                with patch.object(installer, "SOURCE", source), patch.object(shutil, "copyfile", side_effect=guarded_copy):
+                    with self.assertRaisesRegex(ValueError, "symlink"):
+                        installer.install(str(dest))
+                self.assertFalse((dest / installer.NAME).exists())
+                self.assertEqual(sentinel.read_bytes(), before)
+
+    def test_source_root_symlink_and_source_hardlink_are_rejected(self):
+        base = Path(self.tmp.name).resolve()
+        source = base / "source"
+        source.mkdir()
+        sentinel = base / "invented-external.txt"
+        sentinel.write_text("FICTIONAL_EXTERNAL_FILE")
+        alias = base / "source-alias"
+        alias.symlink_to(source, target_is_directory=True)
+        with patch.object(installer, "SOURCE", alias):
+            with self.assertRaisesRegex(ValueError, "symlink source root"):
+                installer.install(self.dest)
+        os.link(sentinel, source / "linked.txt")
+        with patch.object(installer, "SOURCE", source):
+            with self.assertRaisesRegex(ValueError, "hard-linked"):
+                installer.install(self.dest)
+        self.assertFalse((Path(self.dest) / installer.NAME).exists())
+        self.assertEqual(sentinel.read_text(), "FICTIONAL_EXTERNAL_FILE")
+
+    def test_symlink_introduced_after_source_preflight_is_never_dereferenced(self):
+        base = Path(self.tmp.name).resolve()
+        source = base / "source"
+        source.mkdir()
+        (source / "SKILL.md").write_text("fictional source stub")
+        sentinel = base / "invented-external.txt"
+        sentinel.write_text("FICTIONAL_EXTERNAL_FILE")
+        original_digest = installer.digest_tree
+        def introduce_link(root):
+            result = original_digest(root)
+            if root == source:
+                (source / "late-link").symlink_to(sentinel)
+            return result
+        with patch.object(installer, "SOURCE", source), patch.object(installer, "digest_tree", side_effect=introduce_link):
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                installer.install(self.dest)
+        self.assertFalse((Path(self.dest) / installer.NAME).exists())
+        self.assertEqual(sentinel.read_text(), "FICTIONAL_EXTERNAL_FILE")
+        self.assertEqual(list(Path(self.dest).glob(".personal-context-install-*")), [])
+
+    def test_source_symlink_ancestor_is_rejected_before_reading_source(self):
+        base = Path(self.tmp.name).resolve()
+        outside = base / "invented-outside-skills"
+        source = outside / installer.NAME
+        source.mkdir(parents=True)
+        (source / "fixture.txt").write_text("FICTIONAL_EXTERNAL_CONTENT")
+        alias = base / "skills"
+        alias.symlink_to(outside, target_is_directory=True)
+        nested_source = alias / installer.NAME
+        self.assertFalse(nested_source.is_symlink())
+        with patch.object(installer, "SOURCE", nested_source), patch.object(installer, "digest_tree") as digest:
+            with self.assertRaisesRegex(ValueError, "symlink source root or ancestor"):
+                installer.install(self.dest)
+            digest.assert_not_called()
+        self.assertFalse((Path(self.dest) / installer.NAME).exists())
 
 
 if __name__ == "__main__":

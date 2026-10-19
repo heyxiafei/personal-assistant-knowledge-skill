@@ -35,6 +35,50 @@ KINDS = {"fact": "来源所述事实", "inference": "推断", "recommendation": 
 FIXED = ("INDEX.md", "PERSON_PROFILE.md", "LONG_TERM.md", "SOURCES.md")
 TEMPLATES = Path(__file__).resolve().parents[1] / "assets" / "templates"
 ID = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")
+# Conservative refusal cues, not a general natural-language truth detector.
+NONCURRENT = re.compile(
+    r"预计|预期|打算|计划|准备|将要|到时|届时|以后|之后再|稍后|明天|后天|下周|下个月|"
+    r"如果|假如|要是|倘若|一旦|只要|等到|建议|不妨|也许|可能|或许|尚不清楚|仍未知|不知道|"
+    r"\b(?:will|would|may|might|plan(?:ned)?|expect(?:ed)?|if|should|suggest(?:ed)?)\b", re.I)
+# A reporting predicate before a clause is independent of the speaker's name.
+ATTRIBUTED = re.compile(r"(?:说(?:过|道)?|表示|声称|认为|提到)"
+                        r"(?:[：:，,\s\"“‘]|(?=已经|已|尚未|没|目前|现在|完成|通过))|"
+                        r"建议|提议|转述|据说|听说|"
+                        r"\b(?:said|says|say|reportedly|suggested|claims?|claimed)\b", re.I)
+DEPENDENT = re.compile(r"如果|假如|要是|倘若|一旦|只要|等到|建议|提议|不妨|"
+                       r"也许|可能|或许|尚不清楚|仍未知|不知道|"
+                       r"\b(?:if|would|may|might|should|suggest(?:ed)?)\b", re.I)
+CONDITIONAL = re.compile(r"如果|假如|要是|倘若|一旦|只要|等到|\bif\b", re.I)
+CURRENT_ASPECT = re.compile(r"尚未|还没|没有|仍")
+CURRENT_TIME = re.compile(r"^(?:现在|目前|当前|现时|眼下|此刻)")
+INTENTION = re.compile(r"打算|计划|准备")
+
+
+def noncurrent(value):
+    # An ongoing-state predicate makes 计划 its subject/noun, not an action
+    # modality. Keep every other unquoted use conservative, including 我也计划.
+    value = re.sub(r"计划(?=还在|仍在|正在|尚在|仍然在)", "  ", value)
+    return NONCURRENT.search(value)
+
+
+def independent_current_prefix(prefix):
+    """End independent intentions, never erase an enclosing condition/time."""
+    if CONDITIONAL.search(prefix):
+        return False
+    clauses = [c.strip() for c in re.split(r"[，,；;]", prefix) if c.strip()]
+    # A genuine present-time bridge may end an earlier hypothetical move.
+    for index, clause in enumerate(clauses):
+        if CURRENT_TIME.match(clause) and not DEPENDENT.search(clause):
+            clauses = clauses[index:]
+            break
+    for clause in clauses:
+        if DEPENDENT.search(clause):
+            return False
+        if noncurrent(clause):
+            intent = INTENTION.search(clause)
+            if not intent or noncurrent(clause[:intent.start()]):
+                return False
+    return True
 
 
 class ContextError(Exception):
@@ -149,6 +193,8 @@ def validate(record, incoming=True):
     fields = {"id", "category", "layer", "kind", "status", "text", "sources",
               "event_date", "record_date", "valid_from", "confirmed_on",
               "confirmation", "supersedes"}
+    if isinstance(record, dict) and "assertion" in record:
+        fields.add("assertion")
     if not incoming:
         fields.add("superseded_by")
         if isinstance(record, dict) and "original_status" in record:
@@ -206,12 +252,123 @@ def validate(record, incoming=True):
         if (record["status"] != "confirmed" and not historical
                 or not record["confirmed_on"] or not record["confirmation"]):
             raise ContextError("replacement needs explicit confirmation")
+    if "assertion" in record:
+        validate_assertion(record)
     if not incoming:
         target = record["superseded_by"]
         if target is not None and (not isinstance(target, str) or not ID.fullmatch(target)):
             raise ContextError("invalid superseded_by")
         if (record["status"] == "superseded") != bool(target):
             raise ContextError("superseded status and replacement must agree")
+
+
+def source_view(value, reported_boundaries=False):
+    """Mask quoted literals without changing offsets; never invent missing quotes."""
+    opening = {'“': '”', '‘': '’', '「': '」', '『': '』', '《': '》', '〈': '〉',
+               '"': '"', "'": "'"}
+    closing = set(opening.values())
+    result, stack = list(value), []
+    for i, char in enumerate(value):
+        # Decimal points, versions and filenames do not end a source clause or
+        # erase a condition before the selected statement. Keep offsets stable.
+        if char == '.' and 0 < i < len(value) - 1 and value[i-1].isalnum() and value[i+1].isalnum():
+            result[i] = ' '
+            continue
+        # An apostrophe inside an ASCII word is not a quoted literal.
+        if (char in {"'", '’'} and 0 < i < len(value) - 1
+                and all(c.isascii() and c.isalnum() for c in (value[i-1], value[i+1]))):
+            if stack:
+                result[i] = ' '
+            continue
+        if stack:
+            result[i] = ' '
+            if char == stack[-1]:
+                stack.pop()
+                # A sentence-final mark inside closed direct speech ends that
+                # speaker's report. Use this boundary only for attribution;
+                # enclosing conditions/time cues must retain their full scope.
+                if (reported_boundaries and not stack and char not in {'》', '〉'}
+                        and value[:i].rstrip(' \t\r\n”’」』\"\'').endswith(('。', '.', '!', '?', '？'))):
+                    result[i] = '。'
+            elif char in opening:
+                stack.append(opening[char])
+            elif char in closing:
+                return '', False
+        elif char in opening:
+            result[i] = ' '
+            stack.append(opening[char])
+        elif char in closing:
+            return '', False
+    return ''.join(result), not stack
+
+
+def validate_assertion(record):
+    """Bind an event-state claim to an unshortened source clause, fail closed."""
+    a = record["assertion"]
+    if (not isinstance(a, dict) or set(a) != {
+            "state", "author_role", "source", "source_text", "statement"}
+            or not isinstance(a["state"], str) or not isinstance(a["author_role"], str)
+            or a["state"] not in {"observed", "planned", "uncertain"}
+            or a["author_role"] not in {"user", "third_party", "assistant", "unknown"}):
+        raise ContextError("assertion needs state, author_role, source, source_text and statement")
+    if a["source"] not in record["sources"]:
+        raise ContextError("assertion source must match a supplied source reference")
+    if (not isinstance(a["source_text"], str) or not a["source_text"].strip()
+            or len(a["source_text"]) > 6000
+            or not isinstance(a["statement"], str) or not a["statement"].strip()
+            or len(a["statement"]) > 4000):
+        raise ContextError("assertion needs bounded raw source text and a statement")
+    # Match a complete punctuation-delimited clause; dropping a negation or condition
+    # from the front of a clause must not produce independent event evidence.
+    statement = a["statement"].strip()
+    view, balanced = source_view(a["source_text"])
+    if not balanced:
+        raise ContextError("assertion source has unbalanced quotes; preserve raw text and confirm")
+    matches = [m for m in re.finditer(r"[^。；;，,\n.!]+", view)
+               if a["source_text"][m.start():m.end()].strip() == statement]
+    if len(matches) != 1 or record["text"].strip().rstrip("。.!；;") != statement:
+        raise ContextError("assertion text must preserve one complete verbatim source clause")
+    if a["state"] != "observed":
+        if record["layer"] != "daily" or record["supersedes"]:
+            raise ContextError("planned/uncertain assertions stay daily without supersedes")
+        return
+    # Earlier clauses in the same sentence can condition or attribute this claim.
+    # Later independent plans do not undo an explicit observation/correction.
+    prefix = re.split(r"[。\n.!?？]", view[:matches[0].start()])[-1]
+    reported_view, _ = source_view(a["source_text"], reported_boundaries=True)
+    report_prefix = re.split(r"[。\n.!?？]", reported_view[:matches[0].start()])[-1]
+    statement_view, balanced = source_view(statement)
+    scope = prefix + statement_view
+    # An explicit current-time clause can follow an independent future intention.
+    # It cannot escape a preceding condition, uncertainty or reported speaker.
+    temporal_prefix = prefix
+    independent_aspect = (CURRENT_ASPECT.search(statement_view)
+                          and independent_current_prefix(prefix))
+    if ((re.match(r"^(?:现在|目前|当前|现时)", statement_view.strip())
+         and not DEPENDENT.search(prefix)) or independent_aspect):
+        temporal_prefix = ""
+    if (a["author_role"] != "user" or not balanced
+            or not any(c.isalnum() for c in statement_view)
+            or noncurrent(temporal_prefix + statement_view)
+            or ATTRIBUTED.search(report_prefix + statement_view) or re.search(r"[?？]", scope)
+            or a["source_text"][matches[0].end():].lstrip().startswith(("?", "？"))):
+        raise ContextError("observed assertion is not explicit user event/state evidence; retain unknown and confirm")
+
+
+def guard_current_fact(record, records):
+    if record["kind"] != "fact" or record["status"] == "unknown":
+        return
+    current = record["layer"] in {"profile", "longterm"} or record["supersedes"]
+    text = record["text"]
+    if record.get("assertion", {}).get("state") == "observed":
+        text, _ = source_view(text)  # validate_assertion already checked the full evidence.
+    if current and noncurrent(text):
+        raise ContextError("future/uncertain text cannot replace current facts; retain unknown and use daily")
+    replaces_unknown = any(records.get(rid, {}).get("status") == "unknown"
+                           for rid in record["supersedes"])
+    if replaces_unknown and ("assertion" not in record
+            or record["assertion"]["state"] != "observed"):
+        raise ContextError("replacing an unknown fact needs observed source assertion; save confirmation is not event evidence")
 
 
 def validate_state(records):
@@ -252,6 +409,10 @@ def render(records):
                   + "；依据：" + html.escape(r["confirmation"] or "无")]
         lines += ["- 来源：" + html.escape(s["label"]) + " · " + html.escape(s["locator"])
                   for s in r["sources"]]
+        if "assertion" in r:
+            a = r["assertion"]
+            lines += ["- 来源事件状态：" + a["state"] + "；作者角色：" + a["author_role"],
+                      "- 事件依据原文：" + html.escape(a["source_text"])]
         if "original_status" in r:
             lines += ["- 替代前状态：" + STATUS[r["original_status"]]]
         if r["superseded_by"]:
@@ -321,6 +482,9 @@ def semantic(record):
     # Separate dated events and statements of different certainty.
     key = (record["category"], record["layer"], record["kind"], record["status"], norm,
            record["event_date"], record["valid_from"], tuple(record["supersedes"]))
+    a = record.get("assertion")
+    # Source references are corroboration, not a second occurrence of the event.
+    key += ((a["state"], a["author_role"]) if a else (None, None),)
     return key + ((record["record_date"],) if record["layer"] == "daily" else ())
 
 
@@ -411,6 +575,7 @@ def make_plan(root, bundle):
             validate(same, incoming=False)
             outcome.append({"id": rid, "status": "merged", "into": same["id"]})
             continue
+        guard_current_fact(new, records)
         for oldid in new["supersedes"]:
             old = records.get(oldid)
             if old is None or old["status"] == "superseded":

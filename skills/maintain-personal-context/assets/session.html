@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-__SCRIPT_HASH__'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>个人上下文 · 离线会话</title>
+<style>
+:root{font:16px/1.65 system-ui,sans-serif;color:#232e30;background:#f3f1eb}*{box-sizing:border-box}body{margin:0}main{max-width:1000px;margin:0 auto;padding:36px 24px 70px}h1{font-size:2rem;line-height:1.3}h2{font-size:1.2rem;margin-top:0}h3{font-size:1rem}p{margin:.5rem 0 1rem}small,.meta{font-size:.86rem;color:#526163;overflow-wrap:anywhere}.banner{border-left:4px solid #41745d;padding:14px 18px;background:#e5eee6;margin:20px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.card,details{background:#fffdf8;border:1px solid #d6d9cc;border-radius:12px;padding:22px;margin:18px 0}.grid .card{margin:0}li{margin:12px 0;overflow-wrap:anywhere}ul{padding-left:22px}button{font:inherit;cursor:pointer;border:1px solid #657c70;border-radius:7px;background:#fff;padding:9px 14px;color:#243e32;margin:5px 8px 5px 0}button.primary{background:#244f3a;color:#fff}button:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid #b88036;outline-offset:3px}label{display:block;margin:12px 0;padding:8px 10px;background:#f3f5ee;border-radius:7px}textarea{display:block;width:100%;font:inherit;min-height:110px;border:1px solid #7e8b84;border-radius:7px;padding:10px;margin:10px 0}textarea:disabled{opacity:.55}pre{font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f4ef;padding:14px;border-radius:6px}.error{color:#9d361f;min-height:1.5em}.status{font-weight:650;color:#315d46}.foot{margin-top:28px}#question:empty{display:none}@media(max-width:500px){main{padding:24px 16px}h1{font-size:1.65rem}.card{padding:18px}}
+</style>
+</head>
+<body>
+<main>
+<header><p class="meta">个人上下文 / 私人离线会话</p><h1 id="title"></h1><p id="stamp" class="meta"></p></header>
+<div class="banner">这是有来源的会话快照。知识库写入状态：未据此更新。旧来源可能已有变化；下一步和建议都不自动执行。</div>
+<section class="card" aria-labelledby="coverage-title"><h2 id="coverage-title">来源与覆盖边界</h2><p id="scope"></p><ul id="coverage"></ul><div id="sources"></div></section>
+<div id="views" class="grid"></div>
+<section class="card" aria-labelledby="interview-title"><h2 id="interview-title">可选补充 · 每轮一题</h2><p>只问仍缺或矛盾的内容；可以选一项、自由输入、跳过、暂不确定或不保存。未答项保持空白。</p><p id="progress" class="status" aria-live="polite"></p><div id="question"></div><p id="error" class="error" role="alert"></p></section>
+<section class="card"><h2>保存本轮回答</h2><p>回答只留在当前页面内存，刷新或关闭会丢失。本页不联网、不自动存储。点击下载后，把 JSON 交给助手核对，再明确要保存的内容与目标；下载不等于已入库。“这项不保存”只输出排除状态，不输出其答案。</p><button id="download" class="primary" type="button">下载回答 JSON</button><p id="download-status" class="meta" aria-live="polite"></p></section>
+<p class="meta foot">重新使用：在新会话中校验此会话包，读取来源边界和未答阶段，再核对当前状态。暂停和取消状态保持原样。</p>
+<noscript>此页面的问答需要 JavaScript。可直接阅读 result.md；未运行问答时，全部回答仍为空。</noscript>
+</main>
+<script type="application/json" id="session-data">__SESSION_DATA__</script>
+<script id="app-code">
+"use strict";
+(() => {
+  const session = JSON.parse(document.getElementById("session-data").textContent);
+  const data = session.payload;
+  const labels = {current:"当前",planned:"计划",paused:"已暂停",cancelled:"已取消",uncertain:"待核",historical:"过往"};
+  const views = {identity:"你是谁",capability:"你能做什么",ongoing:"你在做什么",next:"下一步"};
+  const el = (tag, text, className) => {
+    const node = document.createElement(tag);
+    if (text !== undefined) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  };
+  const byId = id => document.getElementById(id);
+  byId("title").textContent = data.title;
+  document.title = data.title + " · 离线会话";
+  byId("stamp").textContent = "快照时间：" + data.as_of + " · 版本：" + session.bundle_digest;
+  byId("scope").textContent = data.coverage.scope;
+  for (const note of data.coverage.limits) byId("coverage").append(el("li", "限制：" + note));
+  for (const note of data.coverage.uncovered) byId("coverage").append(el("li", "未覆盖：" + note));
+  for (const source of data.sources) {
+    const details = el("details");
+    details.append(el("summary", source.id + " · " + source.title + " · " + source.read_status));
+    details.append(el("p", "定位：" + source.locator + " / 类型：" + source.kind + " / 时间范围：" + source.time_range, "meta"));
+    for (const note of source.limitations) details.append(el("p", "限制：" + note, "meta"));
+    if (source.snapshot !== null) details.append(el("pre", source.snapshot));
+    byId("sources").append(details);
+  }
+  for (const [category, label] of Object.entries(views)) {
+    const card = el("section", undefined, "card");
+    card.append(el("h2", label));
+    const facts = data.facts.filter(fact => fact.category === category);
+    const list = el("ul");
+    for (const fact of facts) {
+      const item = el("li", fact.text);
+      item.append(el("p", labels[fact.status] + " / 来源：" + fact.source_ids.join("、") + " / 敏感性：" + fact.sensitivity, "meta"));
+      list.append(item);
+    }
+    card.append(facts.length ? list : el("p", "暂无已读依据，保留空白。"));
+    byId("views").append(card);
+  }
+  const advice = el("section", undefined, "card");
+  advice.append(el("h2", "建议"));
+  for (const item of data.advice) {
+    advice.append(el("p", item.text));
+    advice.append(el("p", "仅条件建议 / 依据事实：" + item.fact_ids.join("、") + " / 采用条件：" + item.condition, "meta"));
+  }
+  if (!data.advice.length) advice.append(el("p", "暂无建议。"));
+  byId("views").append(advice);
+
+  const responses = data.questions.map(question => ({question_id:question.id, action:"unanswered", answer:null}));
+  let index = 0;
+  const advance = (action, answer = null) => {
+    responses[index] = {question_id:data.questions[index].id, action, answer};
+    index += 1;
+    renderQuestion();
+  };
+  function renderQuestion() {
+    byId("question").replaceChildren();
+    byId("error").textContent = "";
+    const total = data.questions.length;
+    byId("progress").textContent = index < total ? "待答阶段 · 第 " + (index + 1) + " / " + total + " 题" : (total ? "本页本轮已处理；未写入知识库。" : "本包没有待答题。未追加问题。");
+    if (index >= total) return;
+    const question = data.questions[index];
+    const box = byId("question");
+    box.append(el("h3", question.text), el("p", "为什么问：" + question.reason, "meta"));
+    if (question.fact_ids.length) box.append(el("p", "相关事实：" + question.fact_ids.join("、"), "meta"));
+    let selected = null;
+    const free = el("textarea");
+    free.disabled = true;
+    free.setAttribute("aria-label", "自由回答");
+    const radios = [];
+    const choice = (id, label) => {
+      const wrapper = el("label");
+      const radio = el("input");
+      radio.type = "radio";
+      radio.name = "answer";
+      radio.value = id;
+      radio.checked = false;
+      radio.addEventListener("change", () => {
+        selected = id;
+        free.disabled = id !== "__free__";
+        for (const other of radios) other.checked = other === radio;
+      });
+      radios.push(radio);
+      wrapper.append(radio, el("span", " " + label));
+      box.append(wrapper);
+    };
+    for (const option of question.options) choice(option.id, option.label);
+    choice("__free__", "自由输入");
+    box.append(free);
+    const submit = el("button", "确认本题回答", "primary");
+    submit.type = "button";
+    submit.addEventListener("click", () => {
+      if (selected === null || (selected === "__free__" && !free.value.trim())) {
+        byId("error").textContent = "请选择一项或输入自己的回答，也可以跳过。";
+        return;
+      }
+      advance("answer", selected === "__free__" ? {option_id:null, text:free.value} : {option_id:selected, text:null});
+    });
+    box.append(submit);
+    for (const [action, label] of [["skip","跳过"],["uncertain","暂不确定"],["do_not_save","这项不保存"]]) {
+      const button = el("button", label);
+      button.type = "button";
+      button.addEventListener("click", () => { free.value = ""; advance(action); });
+      box.append(button);
+    }
+  }
+  byId("download").addEventListener("click", () => {
+    const value = {kind:"session_responses", schema_version:1, bundle_digest:session.bundle_digest, responses};
+    const blob = new Blob([JSON.stringify(value, null, 2) + "\n"], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const link = el("a");
+    link.href = url;
+    link.download = "session-responses.json";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    byId("download-status").textContent = "已请求浏览器下载；请核对下载文件。未更新知识库。";
+  });
+  renderQuestion();
+})();
+</script>
+</body>
+</html>

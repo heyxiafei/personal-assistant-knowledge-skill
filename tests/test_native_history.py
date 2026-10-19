@@ -47,6 +47,63 @@ class NativeHistoryTests(unittest.TestCase):
         self.assertFalse(m.discovery(f)["page_terminal"])
         self.assertEqual(m.discovery(f)["account_enumeration_complete"], "unknown")
 
+    def test_mixed_list_keeps_other_raw_history_for_routing(self):
+        page = {"threads": [{"id": "shared", "kind": "codex", "hostId": "local"},
+                             {"id": "shared", "kind": "chatgpt"}],
+                "pinnedThreads": [{"id": "shared", "kind": "chatgpt"}]}
+        result = m.discovery(page)
+        self.assertEqual(result["returned_unique"], 1)
+        self.assertEqual(result["other_returned_unique"], 1)
+        self.assertEqual(result["all_returned_unique"], 2)
+        self.assertEqual(result["other_sources"][0]["kind"], "chatgpt")
+        self.assertEqual(result["other_sources"][0]["status"], "discovered_unread")
+        self.assertIsNone(result["other_sources"][0]["host_id"])
+
+    def test_empty_truncated_message_remains_unread_after_normalization(self):
+        f = fixture()
+        item = f["reads"][1]["payload"]["turns"][1]["items"][0]
+        item["content"] = [{"type": "text", "text": "", "truncated": True}]
+        result = normalize(f)
+        message = next(m for m in result["messages"] if m["message_id"] == item["id"])
+        self.assertEqual(message["read_status"], "unread")
+        self.assertTrue(message["truncation_observed"])
+        self.assertIs(result["coverage"]["thread_text_range_complete"], False)
+
+    def test_omitted_user_text_is_unread_even_without_truncated_flag(self):
+        f = fixture()
+        item = f["reads"][1]["payload"]["turns"][1]["items"][0]
+        item.update(content=[], content_omitted=True)
+        message = next(m for m in normalize(f)["messages"] if m["message_id"] == item["id"])
+        self.assertEqual(message["read_status"], "unread")
+
+    def test_missing_body_preserves_user_and_assistant_identity_as_unread(self):
+        for position, field in ((0, "content"), (1, "text")):
+            f = fixture()
+            item = f["reads"][1]["payload"]["turns"][1]["items"][position]
+            item.pop(field)
+            item["content_omitted"] = True
+            message = next(m for m in normalize(f)["messages"] if m["message_id"] == item["id"])
+            self.assertEqual(message["text"], "")
+            self.assertEqual(message["read_status"], "unread")
+            self.assertTrue(message["truncation_observed"])
+
+    def test_missing_text_block_marks_returned_fragment_partial(self):
+        f = fixture()
+        item = f["reads"][1]["payload"]["turns"][1]["items"][0]
+        item["content"].append({"type": "text"})
+        message = next(m for m in normalize(f)["messages"] if m["message_id"] == item["id"])
+        self.assertTrue(message["text"])
+        self.assertEqual(message["read_status"], "partial")
+        self.assertTrue(message["truncation_observed"])
+
+    def test_overlap_preserves_page_limits_without_inventing_content_conflict(self):
+        f = fixture()
+        f["reads"][1]["payload"]["page"]["truncated"] = True
+        result = normalize(f)
+        self.assertEqual(result["duplicate_messages"], 2)
+        self.assertTrue(result["messages"][0]["truncation_observed"])
+        self.assertEqual(result["messages"][0]["read_status"], "partial")
+
     def test_archive_eof_only_page_scope_not_account_total(self):
         result = m.discovery(FIXTURE["archive"], tool="list_archived_threads", caller_host="local")
         self.assertTrue(result["page_terminal"])

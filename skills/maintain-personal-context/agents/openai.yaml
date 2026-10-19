@@ -1,4 +1,4 @@
 interface:
   display_name: "个人助手知识库"
-  short_description: "首次调用建私有 Space，按真实覆盖整理上下文"
-  default_prompt: "使用 $maintain-personal-context，在本次授权范围和已有工具下建立或续建我的个人助手 Space，整理可读对话和项目，报告覆盖缺口，再提出最多三项补充问题。"
+  short_description: "先给有来源的个人资料初稿，逐题补缺纠正，确认后增量保存到私人库"
+  default_prompt: "使用 $maintain-personal-context，先读本次获准资料并展示覆盖清单和四段可纠正初稿，再逐题补缺；我确认当前内容与私人目标后再保存，暂不写断点。"

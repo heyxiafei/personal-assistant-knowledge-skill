@@ -358,17 +358,18 @@ def change_summary(state, change_id):
             "confirmation": copy.deepcopy(change["confirmation"])}
 
 
-def load_state(path):
+def load_state(path, with_hash=False):
     path = Path(path)
     if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
         raise StateError("state must be a regular non-linked file")
-    data = json.loads(path.read_text())
+    raw = path.read_bytes()
+    data = json.loads(raw)
     if data.get("schema_version") != 1:
         raise StateError("unsupported state schema")
-    return data
+    return (data, hashlib.sha256(raw).hexdigest()) if with_hash else data
 
 
-def save_state(path, state, expected_revision=None):
+def save_state(path, state, expected_revision=None, expected_file_hash=None):
     """Atomic local save with a lock and optimistic revision guard; no blind overwrite."""
     path = Path(path)
     if not path.is_absolute():
@@ -378,9 +379,9 @@ def save_state(path, state, expected_revision=None):
     if any(p.is_symlink() for p in path.parents):
         raise StateError("state directory must not traverse symbolic links")
     path = path.resolve()
-    package = Path(__file__).resolve().parents[3]
-    if path == package or package in path.parents:
-        raise StateError("private journal must be outside the public source package")
+    # Locate actual source/Skill markers below. A fixed parents[3] is only
+    # correct in the repository layout; installed copies have a different depth
+    # and must allow a private checkpoint beside their installation directory.
     for ancestor in [path.parent, *path.parent.parents]:
         if (ancestor / "skills" / "maintain-personal-context" / "SKILL.md").is_file():
             raise StateError("private journal must be outside every public source package copy")
@@ -396,6 +397,9 @@ def save_state(path, state, expected_revision=None):
     tmp = None
     try:
         os.close(fd)
+        if expected_file_hash is not None and (not path.is_file() or
+                hashlib.sha256(path.read_bytes()).hexdigest() != expected_file_hash):
+            raise StateError("journal bytes changed; preserve edits and reread before saving")
         if expected_revision is None:
             if path.exists():
                 raise StateError("existing journal: load and preserve it")

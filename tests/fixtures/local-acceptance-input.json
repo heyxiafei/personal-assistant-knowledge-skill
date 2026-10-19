@@ -1,0 +1,17 @@
+{
+  "notice": "全部为虚构成人场景；不含真实用户、项目、附件或账户。media_receipts 是模拟回执，不证明媒体解码。",
+  "request": "使用现有 Skill 在本地隔离目录维护资料，保留人工备注、来源和纠错链。把下列原话及模拟附件回执形成简短项目状态与可选建议。不要写云端、联网、制造、发布或恢复已取消任务。",
+  "events": [
+    {"id": "fictional-m1", "role": "user", "date": "2026-04-01", "text": "请保存：展示架的设计文件已交付，实物还没做；验收和发布也没有进行。"},
+    {"id": "fictional-m2", "role": "user", "date": "2026-04-02", "text": "更新并保存：我已打印一个展示架小样，但没有验收，也没有公开发布。"},
+    {"id": "fictional-m3", "role": "user", "date": "2026-04-03", "text": "取消展示架后续制作，保留这次小样经历。以后读到旧设计也不要重开。请保存这个状态。"},
+    {"id": "fictional-m4", "role": "assistant", "date": "2026-04-04", "text": "可以考虑做批量展示架。"},
+    {"id": "fictional-m5", "role": "user", "date": "2026-04-05", "text": "归档补充：这是之前的旧设计截图，只能看清一角。不要恢复制作任务。"}
+  ],
+  "media_receipts": [
+    {"id": "fictional-image", "source_message": "fictional-m5", "kind": "screenshot", "observed": "只读到截图左上角，标题为展示架草图；其余模糊", "complete": false},
+    {"id": "fictional-audio", "source_message": "fictional-m2", "kind": "audio", "duration_seconds": 30, "transcribed_ranges": [[0, 8]], "observed": "已打印一个小样", "limitations": "其余未转写；未听原音，无法确认说话人"},
+    {"id": "fictional-video", "kind": "video", "duration_seconds": null, "observed": null, "limitations": "本环境未提供可用视频阅读器"}
+  ],
+  "manual_note": "人工备注：已有样品待归档，不安排生产。"
+}

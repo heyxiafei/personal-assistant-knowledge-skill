@@ -47,6 +47,8 @@ memory 是衍生摘要/索引，可能延迟、过时或缺来源；记录 granu
 
 [native_history.py](../scripts/native_history.py) 只规范化你已经合法读取的回执，验证 host/线程和游标链、去重并输出用户/助手文字；不调用上述工具，不自行发现历史，不自动推断纠错或写 Space。
 
+发现格式器的 `sources/returned_unique` 仍专指可由该 Codex 适配器处理的条目；同一列表的其他 kind 保存在 `other_sources/other_returned_unique`，`all_returned_unique` 是两者之和。其他来源须按当前真实阅读器继续路由或记明确未读，不能静默过滤。它不证明来源都获准或内容已读。规范化消息保留 `read_status/truncation_observed/attachments_not_read`；空文且观察到截断为 unread，其余未见截断仅称 text_returned，不证明全部附件或省略内容完整。
+
 同一模块可选 reconcile_claims(claims, required_keys) 归并 Agent 已判读的语义标注。字段为 key/value、source_kind（conversation/memory/saved_material）、source_id（到消息/页块/文档位置）、author_role、evidence_tier（direct/saved/summary）、recorded_at（有时区或未知），明确用户纠正另有 correction_of。它不从自然语言自动生成这些标注、不认证作者或授权。相同 key/value 合并来源；memory 强制 summary；有日期的直接用户纠正只替代更早的对应值；作者未知的保存资料不会升级用户事实，但较晚/同日/日期未知的矛盾资料仍列 conflict，不误标已经被替代。确定较早的无权威其他值保留出处，不凭空覆盖较新用户事实。known 不进入 question_keys，单一摘要保留未确认候选，缺项/冲突供 Agent 选最多三问；助手建议不能填成用户目标。旧证据及 derived_from 保留，不按来源数量推定独立证据。
 
 私有 JSON 输入字段为 thread_id、host_id、reads；每项 reads 为 request_cursor（首次 null）和 payload（真实返回 JSON/MCP 包装）。将输入/输出放指定的公开仓库外私人目录，运行：
