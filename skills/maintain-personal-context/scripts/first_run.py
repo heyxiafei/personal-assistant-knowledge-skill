@@ -206,11 +206,13 @@ def check_action_scope(recommendation, known):
     return result
 
 
-def build_result(data):
+def build_result(data, *, interview=False):
     """Validate structure/provenance grade, not raw-text truth or live Page permissions.
 
     Callers supply already reviewed canonical claims, actual entry status and advice.
     Recommendations never change input claims or become facts.
+    interview=True leaves missing-field questions to interview.py, permits a
+    source-backed draft without advice, and includes known current constraints.
     """
     if not isinstance(data, dict) or not isinstance(data.get("claims"), list):
         raise ResultError("claims list required")
@@ -271,7 +273,7 @@ def build_result(data):
     missing = [gap for gap in GAPS if gap[0] not in known]
     # Missing high-value context has priority over extra advice. Total first-round
     # actions stays <=3; do not consume all slots with advice and hide missing inputs.
-    reserved = min(3, len(missing))
+    reserved = 0 if interview else min(3, len(missing))
     actions = actions[:3 - reserved]
     for key, what, why, how in missing[:reserved]:
         if key == "time_resources" and "resources" in known:
@@ -290,7 +292,7 @@ def build_result(data):
         # Missing context behind an unavailable entry is a coverage gap, not a
         # request to re-enter the profile or repeatedly try a refused source.
         actions = grounded_actions
-    if not actions and not source_review["blocked_roles"]:
+    if not actions and not source_review["blocked_roles"] and not interview:
         raise ResultError("known context requires at least one executable recommendation")
     coverage = data.get("coverage_gaps", [])
     if not isinstance(coverage, list) or any(not isinstance(s, str) or not s.strip() for s in coverage):
@@ -309,10 +311,17 @@ def build_result(data):
             return "needs_refresh"
         return "source_review_pending" if not source_review["complete_in_checked_scope"] else "unknown_in_checked_scope"
 
+    doing_keys = data.get("current_project_keys", ["current_situation", "current_problem", "near_term_goal"])
+    if not isinstance(doing_keys, list) or any(not isinstance(k, str) for k in doing_keys):
+        raise ResultError("current_project_keys must be a list of reviewed claim keys")
+    identity_fields = IDENTITY + (("time_resources", "当前约束"),
+                                  ("collaboration_preference", "协作偏好")) if interview else IDENTITY
+    priority_key = next((k for k in ("current_problem", "current_situation", "near_term_goal") if k in known), None)
     return {"entry": entry, "source_review": source_review,
+            "doing": [evidence(k) for k in dict.fromkeys(doing_keys) if k in known],
             "identity": [{"key": k, "label": label, "state": field_state(k),
-                          "fact": evidence(k) if k in known else None} for k, label in IDENTITY],
-            "priority": {"kind": "recommendation", "fact": evidence("current_problem") if "current_problem" in known else None},
+                          "fact": evidence(k) if k in known else None} for k, label in identity_fields],
+            "priority": {"kind": "recommendation", "fact": evidence(priority_key) if priority_key else None},
             "actions": actions, "coverage_gaps": list(dict.fromkeys(list(coverage) + gaps)),
             "unresolved_keys": list(dict.fromkeys(f["key"] for f in reconciled["facts"] if f["status"] != "known"))}
 
@@ -341,15 +350,17 @@ def render_result(result):
                "source_review_pending": "有源未读或来源受阻，尚未判定",
                "unknown_in_checked_scope": "本轮必要来源已核对，仍无该字段依据"}.get(row["state"], "")
         lines.append("- " + row["label"] + "：" + (cite(row["fact"]) if row["fact"] else gap))
-    lines += ["", "## 优先问题（建议）", ""]
+    lines += ["", "## 你在做什么", ""]
+    lines += ["- " + cite(f) for f in result.get("doing", [])] or ["- 当前工作尚无足够已读依据；不从旧线程推定仍在进行。"]
+    advice = ["", "## 建议", ""]
     priority = result["priority"]["fact"]
-    lines.append("建议先围绕这个已知问题行动：" + cite(priority) if priority else
+    advice.append("当前主线的依据：" + cite(priority) + "。具体候选与条件见上文，不另增任务。" if priority else
                  "必要资料尚未读完，先核已有目标，不重新询问主线。" if result["source_review"]["continuation_roles"] else
                  "部分来源受阻，当前问题尚无足够已读依据；保留覆盖缺口，暂不追加方案或重问主线。" if result["source_review"]["blocked_roles"] else
-                 "本轮已核来源仍缺当前问题；只补这一项，再决定具体方案。")
-    lines += ["", "## 下一步（建议，不是你的承诺）", ""]
+                 "当前主线尚无足够依据；可保留未知，不因字段名另行重问。")
+    lines += ["", "## 你接下来做什么（候选，最多三项）", ""]
     if not result["actions"]:
-        lines += ["当前没有足够依据生成可执行建议；受阻来源详见覆盖缺口。", ""]
+        lines += ["当前没有足够依据生成可执行建议；已知内容与覆盖缺口仍保留。", ""]
     for number, action in enumerate(result["actions"], 1):
         lines.append(str(number) + ". " + literal(action["label"]))
         basis = "；".join(cite(f) for f in action["basis"]) if isinstance(action["basis"], list) else literal(action["basis"])
@@ -370,6 +381,7 @@ def render_result(result):
         if action["kind"] == "information_action":
             lines += ["   - 提供什么：" + literal(action["what"]), "   - 为什么：" + literal(action["why"]),
                       "   - 怎么提供：" + literal(action["how"])]
+    lines += advice
     lines += ["", "## 覆盖缺口", ""]
     lines += ["- " + literal(s) for s in result["coverage_gaps"]] or ["- 本次未提供覆盖说明，不能推断全量已读。"]
     if result["unresolved_keys"]:

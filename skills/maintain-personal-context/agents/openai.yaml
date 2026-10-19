@@ -1,4 +1,4 @@
 interface:
   display_name: "个人助手知识库"
-  short_description: "整理有来源的个人资料库，支持更新、每日计划与重复工作复用"
-  default_prompt: "使用 $maintain-personal-context，在本次授权范围和已有工具下建立或更新我的个人资料库，整理可读经历、技能、资源、目标和项目，告诉我如何查看和纠错；报告覆盖缺口，并提出最多三项有依据的补充或行动。"
+  short_description: "先给有来源的个人资料初稿，逐题补缺纠正，确认后增量保存到私人库"
+  default_prompt: "使用 $maintain-personal-context，先读本次获准资料并展示覆盖清单和四段可纠正初稿，再逐题补缺；我确认当前内容与私人目标后再保存，暂不写断点。"
