@@ -2,7 +2,7 @@
 
 沿用 `personal-assistant-knowledge-skill / maintain-personal-context`，先整理有来源的个人背景、经历、资源、目标和项目，再用于日常补充、纠错和建议。首次显式调用默认先预览，不创建或重写正式库；用户确认当前内容与目标后才保存，已有本次明确保存授权不重复问。
 
-本目录是 **revision011 本地候选**，新增最小首次访谈流程，暂不公开上传或合并。远端固定提交 `f25bcc250180811552389c03c3279dd2fad9f515` 属于 revision010；其干净下载、39文件隔离安装及冒烟是既有验证，不代表本次新访谈已安装或通过验收。后续版本、安装和发布状态以实际交付回执为准。
+本目录为 **revision012**：在原有首次访谈与受守卫保存流程上，增加可选的私人会话包，提供“你是谁／你能做什么／你在做什么／下一步／建议”五视图、可操作离线补缺和校验后的跨会话读取。输入仍由 Agent 按实际来源判读；包不自行扫描历史、提取自然语言或更新正式知识库。固定提交、安装和真实验收范围以对应交付回执为准。
 
 ## 开始使用
 
@@ -29,6 +29,8 @@
 
 实际库写入与保护继续使用已有工具及 `context_store.py`、`space_state.py`；事务恢复遇手改会保留并报告冲突，不承诺自动修复管理块。日常可说“补充这段经历”“纠正这个条目”“更新这个项目状态”。
 
+需要离线补缺或新会话复用时，按 [私人会话包](skills/maintain-personal-context/references/session-reuse.md) 导出到明确授权的私人目录；来源摘录、暂停状态与未答问题随包保留。页面只在内存记回答，显式下载后再由 Agent 核对；结构校验不等于用户确认、正式入库或来源最新。
+
 ## 安装位置与版本
 
 支持本地 Skill 的客户端；用户级目录为 `${CODEX_HOME:-$HOME/.codex}/skills`，项目级为 `.agents/skills`。试用本地候选可直接显式读取本目录 Skill，不必覆盖已有正式安装。需要隔离安装时，在完整源码根目录执行：
@@ -44,7 +46,7 @@ python3 -B scripts/install.py install --dest "$PROJECT/.agents/skills"
 
 包内不提供媒体解码、识图/OCR、转写、云端API或自动双向同步。Agent只承接实际读到的内容与范围，不把设计、交付、制造、验收和发布混为一谈。访谈 helper 只辅助本地预览与最小状态，不读取历史、不调用UI，不是NLP或事实真实性认证；使用前读对应脚本的实际docstring，不推测命令/API。
 
-Python 3.9+，本地代码使用标准库。可在完整源码根目录按实际需要执行 `python3 -B -m unittest discover -s tests -v`、`python3 -B scripts/check_package.py` 和 `git diff --check`；这些命令不是本次已运行的声明。旧 [验收范围](docs/DELIVERY_ACCEPTANCE.md)、[本地记录](docs/LOCAL_ACCEPTANCE.md)和[历史测试报告](docs/TEST_REPORT.md)保留原版本证据，旧评分不冒充 revision011 的新验证。真实媒体、当前版云端写入、全账户摄取和独立新 Work 仍按实际未验边界报告。
+Python 3.9+，本地代码使用标准库。可在完整源码根目录按实际需要执行 `python3 -B -m unittest discover -s tests -v`、`python3 -B scripts/check_package.py` 和 `git diff --check`；这些命令不是本次已运行的声明。旧 [验收范围](docs/DELIVERY_ACCEPTANCE.md)、[本地记录](docs/LOCAL_ACCEPTANCE.md)和[历史测试报告](docs/TEST_REPORT.md)保留原版本证据，旧评分不冒充后续版本的新验证。真实媒体、当前版云端写入、全账户摄取和独立新 Work 仍按实际未验边界报告。
 
 主入口：[SKILL.md](skills/maintain-personal-context/SKILL.md)。按需读取：[首次访谈](skills/maintain-personal-context/references/first-interview.md)、[四段初稿](skills/maintain-personal-context/references/first-run-result.md)、[历史覆盖](skills/maintain-personal-context/references/history-coverage.md)、[来源与事件](skills/maintain-personal-context/references/assertion-evidence.md)、[Space恢复](skills/maintain-personal-context/references/space-output.md)。
 

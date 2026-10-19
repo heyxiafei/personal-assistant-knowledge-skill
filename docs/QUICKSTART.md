@@ -21,3 +21,9 @@
 默认不另存访谈文件。需要断点时先明确允许保存到公开源码与 Skill 之外的私人位置；下次核对断点与当前目标后续聊。整轮选择不保存则不新建或更新断点、导出和正式库；已有旧断点会如实告知，不会暗中删除。正式库事务失败按安装版 `references/local-helper.md` 的恢复流程处理，人工冲突仍需核对。
 
 流程细节见 [首次访谈](../skills/maintain-personal-context/references/first-interview.md)。本地候选流程与旧版本验收分开；此说明不表示新版已正式安装、公开上传或完成媒体/云端端到端验收。
+
+## 离线补缺与下次继续
+
+已授权保存可复用快照时，可让助手把实际已读来源和当前标注导出为私人会话包：`session.json`、五视图`result.md`和本地`session.html`。页面逐题提供选项与自由输入；未答保持空白，跳过、不确定和不保存不会伪装成事实。刷新前需显式下载回答，下载及读取成功都不代表已入正式库。浏览器须允许本地HTML，未实际打开时保留视觉/点击未验说明。
+
+新会话先读取安装版Skill，再提供包路径和上次交付的`bundle_digest`；使用`session_bundle.py read --bundle 私人包路径 --expect-digest 上次值`校验后承接事实、来源边界与未答项。旧包不包含新的保存授权，不重启暂停或取消项目。手改造成摘要不符时保留文件，核对后另导出新版本。实际schema和完整命令见[会话包说明](../skills/maintain-personal-context/references/session-reuse.md)。
