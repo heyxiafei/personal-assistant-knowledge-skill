@@ -46,11 +46,18 @@ def install(dest):
     parent, target = destination(dest)
     if target.exists():
         raise ValueError("skill already exists; refusing overwrite; keep edits and uninstall explicitly")
+    if any(p.is_symlink() for p in [SOURCE, *SOURCE.parents]):
+        raise ValueError("symlink source root or ancestor is not supported")
+    # Check source links before copying, when their identity is still visible.
+    digest_tree(SOURCE)
     parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".personal-context-install-", dir=parent))
     try:
         skill = stage / NAME
-        shutil.copytree(SOURCE, skill, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        # Preserve any links introduced after preflight so stage validation
+        # rejects them without dereferencing files outside the source package.
+        shutil.copytree(SOURCE, skill, symlinks=True,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         manifest = digest_tree(skill)
         (skill / MARKER).write_text(json.dumps({"name": NAME, "files": manifest}, sort_keys=True))
         # Reserve the target with mkdir so a concurrent install cannot be replaced.

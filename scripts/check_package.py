@@ -36,6 +36,10 @@ def check():
         SKILL / "references/content-coverage.md", SKILL / "scripts/source_checks.py",
         SKILL / "scripts/content_review.py", ROOT / "tests/test_read_receipts.py",
         ROOT / "tests/test_content_review.py",
+        SKILL / "scripts/corpus_ledger.py", SKILL / "references/corpus-ledger.md",
+        SKILL / "references/media-intake.md", ROOT / "docs/LOCAL_ACCEPTANCE.md",
+        ROOT / "tests/test_attachment_coverage.py", ROOT / "tests/test_local_acceptance.py",
+        ROOT / "tests/fixtures/local-acceptance-input.json",
     ]
     for p in required:
         if not p.is_file():
