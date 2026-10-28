@@ -1,0 +1,66 @@
+{
+  "new": {
+    "entry": {"status": "unavailable", "reason": "合成新用户输入；未访问真实账户或云端"},
+    "claims": [],
+    "recommendations": [],
+    "coverage_gaps": ["只有指定的合成输入；没有扫描真实历史、记忆或附件；账户总量未知"],
+    "source_review": [
+      {"role": "personal_profile", "status": "not_found_in_checked_scope", "scope": "仅合成输入，2026-06-01", "reason": "指定合成输入中未提供已有个人主档"},
+      {"role": "workbench", "status": "not_found_in_checked_scope", "scope": "仅合成输入，2026-06-01", "reason": "指定合成输入中未提供已有工作台"},
+      {"role": "materials_index", "status": "not_found_in_checked_scope", "scope": "仅合成输入，2026-06-01", "reason": "指定合成输入中未提供资料索引"},
+      {"role": "related_memory", "status": "not_found_in_checked_scope", "scope": "仅合成输入，2026-06-01", "reason": "指定合成输入中未提供相关记忆"}
+    ]
+  },
+  "existing": {
+    "entry": {"status": "unavailable", "reason": "合成已有资料；未创建正式知识库"},
+    "claims": [
+      {"key": "name", "value": "样例成人甲", "source_id": "fictional-profile#name", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "saved_material", "author_role": "user", "evidence_tier": "saved"},
+      {"key": "current_situation", "value": "正在整理纸偶展览的演示说明", "source_id": "fictional-workbench#situation", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "saved_material", "author_role": "user", "evidence_tier": "saved"},
+      {"key": "skills", "value": "有纸面原型设计经历", "source_id": "fictional-profile#skills", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "saved_material", "author_role": "user", "evidence_tier": "saved"}
+    ],
+    "recommendations": [],
+    "coverage_gaps": ["只读取这两份合成资料；没有读取真实账户"],
+    "source_review": [
+      {"role": "personal_profile", "status": "read", "scope": "仅合成主档，2026-06-01", "source_ids": ["fictional-profile"]},
+      {"role": "workbench", "status": "read", "scope": "仅合成工作台，2026-06-01", "source_ids": ["fictional-workbench"]},
+      {"role": "materials_index", "status": "not_found_in_checked_scope", "scope": "仅合成输入，2026-06-01", "reason": "未提供资料索引"},
+      {"role": "related_memory", "status": "not_found_in_checked_scope", "scope": "仅合成输入，2026-06-01", "reason": "未提供相关记忆"}
+    ]
+  },
+  "all_known": {
+    "entry": {"status": "unavailable", "reason": "合成完整预填；未保存正式库"},
+    "claims": [
+      {"key": "current_situation", "value": "正在整理纸偶展览", "source_id": "fictional-note#situation", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "near_term_goal", "value": "先写一页演示说明", "source_id": "fictional-note#goal", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "collaboration_preference", "value": "本轮先给简短选项", "source_id": "fictional-note#collaboration", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "time_resources", "value": "本周可用半小时", "source_id": "fictional-note#constraints", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "introduction", "value": "成年纸面原型设计从业者", "source_id": "fictional-note#identity", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "skills", "value": "完成过纸面原型作品", "source_id": "fictional-note#capability", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "resources", "value": "已有绘图工具和作品照片", "source_id": "fictional-note#resources", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "assistant_boundaries", "value": "本轮建议只作备选，不自动执行", "source_id": "fictional-note#boundaries", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"}
+    ],
+    "recommendations": [],
+    "coverage_gaps": ["仅这段合成原话；不是全账户覆盖"],
+    "source_review": [
+      {"role": "personal_profile", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供已有个人主档"},
+      {"role": "workbench", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供已有工作台"},
+      {"role": "materials_index", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供资料索引"},
+      {"role": "related_memory", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供相关记忆"}
+    ]
+  },
+  "conflict": {
+    "entry": {"status": "unavailable", "reason": "合成冲突输入；未保存正式库"},
+    "claims": [
+      {"key": "near_term_goal", "value": "先整理纸偶作品", "source_id": "fictional-goal-a", "recorded_at": "2026-06-01T09:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"},
+      {"key": "near_term_goal", "value": "先整理绘图教程", "source_id": "fictional-goal-b", "recorded_at": "2026-06-01T10:00:00+00:00", "source_kind": "conversation", "author_role": "user", "evidence_tier": "direct"}
+    ],
+    "recommendations": [],
+    "coverage_gaps": ["只有两条合成原话，当前适用目标仍需核对"],
+    "source_review": [
+      {"role": "personal_profile", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供个人主档"},
+      {"role": "workbench", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供工作台"},
+      {"role": "materials_index", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供资料索引"},
+      {"role": "related_memory", "status": "not_found_in_checked_scope", "scope": "仅合成原话，2026-06-01", "reason": "未提供相关记忆"}
+    ]
+  }
+}
