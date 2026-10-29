@@ -36,6 +36,20 @@ def check():
         SKILL / "references/content-coverage.md", SKILL / "scripts/source_checks.py",
         SKILL / "scripts/content_review.py", ROOT / "tests/test_read_receipts.py",
         ROOT / "tests/test_content_review.py",
+        SKILL / "scripts/corpus_ledger.py", SKILL / "references/corpus-ledger.md",
+        SKILL / "references/media-intake.md", ROOT / "docs/LOCAL_ACCEPTANCE.md",
+        ROOT / "tests/test_attachment_coverage.py", ROOT / "tests/test_local_acceptance.py",
+        ROOT / "tests/fixtures/local-acceptance-input.json",
+        SKILL / "scripts/core_intake.py", SKILL / "references/core-intake.md",
+        SKILL / "scripts/onboarding.py", SKILL / "scripts/native_index.py", SKILL / "scripts/guided_exploration.py",
+        SKILL / "references/onboarding.md", SKILL / "references/guided-exploration.md",
+        ROOT / "tests/test_onboarding.py", ROOT / "tests/test_guided_exploration.py",
+        SKILL / "scripts/chatgpt_export.py", SKILL / "scripts/codex_appserver.py",
+        ROOT / "tests/test_core_intake.py", ROOT / "tests/test_chatgpt_export.py",
+        ROOT / "tests/test_codex_appserver.py", ROOT / "docs/CORE_INTAKE_ACCEPTANCE.md",
+        ROOT / "docs/CORE_INTAKE_VALIDATION.md",
+        SKILL / "references/chatgpt-export.md", ROOT / "docs/CODEX_RUNTIME_PROBE.md",
+        ROOT / "scripts/check_large_export.py", ROOT / "tests/test_export_stream_contract.py",
     ]
     for p in required:
         if not p.is_file():

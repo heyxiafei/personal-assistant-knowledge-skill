@@ -1,5 +1,7 @@
 # Space-first 测试报告
 
+最新收尾修复仍为本地候选：255 项离线回归、61 文件包检查及官方 quick_validate 通过；独立定点复审关闭三项阻断，24个额外匿名探针通过；匿名本地建库逐条独立审核限定范围通过，执行顺序和链接计数口径的证据限制及未运行阶段另列。此前升级已有草稿 PR 固定提交，详见[本轮独立验收](UPGRADE_ACCEPTANCE.md)。以下各节为历史版本证据，不能视作新需求已通过。
+
 ## RC3.2-P5 发布与固定远端安装
 
 P5限定源码独立审核PASS后，通用源码通过原仓库PR #4交付到main，代码提交 [`817dd4f5162c795e4c359074e93e3fc1c9c91541`](https://github.com/Badge5426/personal-assistant-knowledge-skill/commit/817dd4f5162c795e4c359074e93e3fc1c9c91541)，父提交保留便于回滚。完整远端tree为54个文件，无额外文件；全部Git blob哈希与已审源码匹配。

@@ -2,6 +2,7 @@
 """Offline first-run formatter for Agent-reviewed annotations; no source access or writes."""
 from __future__ import annotations
 import argparse
+from datetime import datetime, timezone
 import json
 import re
 from urllib.parse import urlsplit
@@ -32,8 +33,12 @@ SOURCE_ROLES = {
 }
 SOURCE_STATES = {"read", "not_found_in_checked_scope", "discovered_unread",
                  "partial", "stale", "entry_missing", "entry_unavailable",
-                 "permission_denied", "failed"}
-BLOCKED_SOURCE_STATES = {"entry_missing", "entry_unavailable", "permission_denied"}
+                 "permission_denied", "failed", "user_excluded",
+                 "experiment_excluded", "not_attempted"}
+BLOCKED_SOURCE_STATES = {"entry_missing", "entry_unavailable", "permission_denied",
+                         "user_excluded", "experiment_excluded"}
+PROJECT_STATES = {"planned", "active", "completed", "paused", "cancelled", "unknown"}
+PROJECT_ACTIONS = {"advance", "review", "archive", "clarify", "resume", "reopen"}
 
 
 def review_sources(data):
@@ -120,11 +125,94 @@ def nonempty(value, label):
     return value.strip()
 
 
-def build_result(data):
+def check_action_scope(recommendation, known):
+    """Validate source-backed lifecycle annotations, not natural-language meaning.
+
+    Legacy advice stays usable but explicitly unassessed. A new project-scoped
+    action must name its own state; unrelated projects never gate general advice.
+    """
+    scope = recommendation.get("scope")
+    context = recommendation.get("project_context")
+    if scope is None and context is None:
+        return {"scope": "legacy", "state_check": "not_assessed"}
+    if scope == "general":
+        if context is not None:
+            raise ResultError("general advice cannot carry a project context")
+        return {"scope": "general", "state_check": "not_applicable"}
+    if scope != "project" or not isinstance(context, dict):
+        raise ResultError("project advice requires scope=project and project_context")
+    key = context.get("project_key")
+    if not isinstance(key, str) or key not in known:
+        raise ResultError("project_key must cite a known current project state")
+    fact = known[key]
+    status = context.get("status")
+    if not isinstance(status, str) or status not in PROJECT_STATES or fact["current_value"] != status:
+        raise ResultError("project status must match its source-backed canonical state claim")
+    current = next(v for v in fact["values"] if v["value"] == fact["current_value"])
+    sources = current["sources"]
+    source_ids = context.get("source_ids")
+    if not isinstance(source_ids, list) or not source_ids or any(
+            not isinstance(s, str) or s not in {r["source_id"] for r in sources} for s in source_ids):
+        raise ResultError("project context requires actual current-state source identifiers")
+    if not any(s["source_id"] in source_ids and s["author_role"] == "user"
+               and s["source_kind"] != "memory" and s["evidence_tier"] in {"direct", "saved"}
+               for s in sources):
+        raise ResultError("project state context cannot rely only on a derived source")
+    action = context.get("action_type")
+    allowed = context.get("allowed_actions")
+    if not isinstance(action, str) or action not in PROJECT_ACTIONS \
+            or not isinstance(allowed, list) or not allowed or any(
+                not isinstance(a, str) or a not in PROJECT_ACTIONS for a in allowed) or action not in allowed:
+        raise ResultError("project action must be listed in the reviewed allowed_actions")
+    if action == "advance" and status not in {"planned", "active"}:
+        raise ResultError("completed, paused, cancelled or unknown projects cannot be advanced")
+    authorization = context.get("restart_authorization")
+    if action not in {"resume", "reopen"} and authorization is not None:
+        raise ResultError("restart authorization is only valid for a resume/reopen action")
+    checked_authorization = None
+    if action in {"resume", "reopen"}:
+        if status not in {"completed", "paused", "cancelled"} or not isinstance(authorization, dict):
+            raise ResultError("restart needs a stopped project and a new direct user authorization")
+        auth_key = authorization.get("claim_key")
+        auth_source = authorization.get("source_id")
+        if not isinstance(auth_key, str) or auth_key not in known or known[auth_key]["current_value"] != action:
+            raise ResultError("restart authorization must cite the known explicit action")
+        auth_value = next(v for v in known[auth_key]["values"] if v["value"] == action)
+        direct = [s for s in auth_value["sources"] if s["source_id"] == auth_source
+                  and s["author_role"] == "user" and s["source_kind"] == "conversation"
+                  and s["evidence_tier"] == "direct" and s.get("project_key") == key]
+        if not direct:
+            raise ResultError("restart requires direct user evidence scoped to this project")
+
+        def recorded(row):
+            try:
+                stamp = datetime.fromisoformat(row["recorded_at"].replace("Z", "+00:00"))
+                return stamp.astimezone(timezone.utc) if stamp.tzinfo else None
+            except (KeyError, AttributeError, TypeError, ValueError):
+                return None
+
+        state_dates = [recorded(s) for s in sources if s["author_role"] == "user"
+                       and s["source_kind"] != "memory" and s["evidence_tier"] in {"direct", "saved"}]
+        auth_date = recorded(direct[0])
+        if auth_date is None or not state_dates or any(d is None or d >= auth_date for d in state_dates):
+            raise ResultError("restart authorization must be dated after all current state evidence")
+        checked_authorization = {"claim_key": auth_key, "source_id": auth_source,
+                                 "recorded_at": direct[0]["recorded_at"]}
+    result = {"scope": "project", "state_check": "annotations_checked", "project_context": {
+        "project_key": key, "status": status, "action_type": action,
+        "allowed_actions": list(dict.fromkeys(allowed)), "source_ids": list(dict.fromkeys(source_ids))}}
+    if checked_authorization is not None:
+        result["project_context"]["restart_authorization"] = checked_authorization
+    return result
+
+
+def build_result(data, *, interview=False):
     """Validate structure/provenance grade, not raw-text truth or live Page permissions.
 
     Callers supply already reviewed canonical claims, actual entry status and advice.
     Recommendations never change input claims or become facts.
+    interview=True leaves missing-field questions to interview.py, permits a
+    source-backed draft without advice, and includes known current constraints.
     """
     if not isinstance(data, dict) or not isinstance(data.get("claims"), list):
         raise ResultError("claims list required")
@@ -179,12 +267,13 @@ def build_result(data):
         actions.append({"kind": "recommendation", "label": nonempty(recommendation.get("label"), "recommendation"),
                         "basis": [evidence(k) for k in dict.fromkeys(keys)],
                         "first_step": nonempty(recommendation.get("first_step"), "first step"),
-                        "confirmation_condition": nonempty(recommendation.get("confirmation_condition"), "confirmation condition")})
+                        "confirmation_condition": nonempty(recommendation.get("confirmation_condition"), "confirmation condition"),
+                        **check_action_scope(recommendation, known)})
     grounded_actions = list(actions)
     missing = [gap for gap in GAPS if gap[0] not in known]
     # Missing high-value context has priority over extra advice. Total first-round
     # actions stays <=3; do not consume all slots with advice and hide missing inputs.
-    reserved = min(3, len(missing))
+    reserved = 0 if interview else min(3, len(missing))
     actions = actions[:3 - reserved]
     for key, what, why, how in missing[:reserved]:
         if key == "time_resources" and "resources" in known:
@@ -203,7 +292,7 @@ def build_result(data):
         # Missing context behind an unavailable entry is a coverage gap, not a
         # request to re-enter the profile or repeatedly try a refused source.
         actions = grounded_actions
-    if not actions and not source_review["blocked_roles"]:
+    if not actions and not source_review["blocked_roles"] and not interview:
         raise ResultError("known context requires at least one executable recommendation")
     coverage = data.get("coverage_gaps", [])
     if not isinstance(coverage, list) or any(not isinstance(s, str) or not s.strip() for s in coverage):
@@ -222,10 +311,17 @@ def build_result(data):
             return "needs_refresh"
         return "source_review_pending" if not source_review["complete_in_checked_scope"] else "unknown_in_checked_scope"
 
+    doing_keys = data.get("current_project_keys", ["current_situation", "current_problem", "near_term_goal"])
+    if not isinstance(doing_keys, list) or any(not isinstance(k, str) for k in doing_keys):
+        raise ResultError("current_project_keys must be a list of reviewed claim keys")
+    identity_fields = IDENTITY + (("time_resources", "当前约束"),
+                                  ("collaboration_preference", "协作偏好")) if interview else IDENTITY
+    priority_key = next((k for k in ("current_problem", "current_situation", "near_term_goal") if k in known), None)
     return {"entry": entry, "source_review": source_review,
+            "doing": [evidence(k) for k in dict.fromkeys(doing_keys) if k in known],
             "identity": [{"key": k, "label": label, "state": field_state(k),
-                          "fact": evidence(k) if k in known else None} for k, label in IDENTITY],
-            "priority": {"kind": "recommendation", "fact": evidence("current_problem") if "current_problem" in known else None},
+                          "fact": evidence(k) if k in known else None} for k, label in identity_fields],
+            "priority": {"kind": "recommendation", "fact": evidence(priority_key) if priority_key else None},
             "actions": actions, "coverage_gaps": list(dict.fromkeys(list(coverage) + gaps)),
             "unresolved_keys": list(dict.fromkeys(f["key"] for f in reconciled["facts"] if f["status"] != "known"))}
 
@@ -254,23 +350,38 @@ def render_result(result):
                "source_review_pending": "有源未读或来源受阻，尚未判定",
                "unknown_in_checked_scope": "本轮必要来源已核对，仍无该字段依据"}.get(row["state"], "")
         lines.append("- " + row["label"] + "：" + (cite(row["fact"]) if row["fact"] else gap))
-    lines += ["", "## 优先问题（建议）", ""]
+    lines += ["", "## 你在做什么", ""]
+    lines += ["- " + cite(f) for f in result.get("doing", [])] or ["- 当前工作尚无足够已读依据；不从旧线程推定仍在进行。"]
+    advice = ["", "## 建议", ""]
     priority = result["priority"]["fact"]
-    lines.append("建议先围绕这个已知问题行动：" + cite(priority) if priority else
+    advice.append("当前主线的依据：" + cite(priority) + "。具体候选与条件见上文，不另增任务。" if priority else
                  "必要资料尚未读完，先核已有目标，不重新询问主线。" if result["source_review"]["continuation_roles"] else
                  "部分来源受阻，当前问题尚无足够已读依据；保留覆盖缺口，暂不追加方案或重问主线。" if result["source_review"]["blocked_roles"] else
-                 "本轮已核来源仍缺当前问题；只补这一项，再决定具体方案。")
-    lines += ["", "## 下一步（建议，不是你的承诺）", ""]
+                 "当前主线尚无足够依据；可保留未知，不因字段名另行重问。")
+    lines += ["", "## 你接下来做什么（候选，最多三项）", ""]
     if not result["actions"]:
-        lines += ["当前没有足够依据生成可执行建议；受阻来源详见覆盖缺口。", ""]
+        lines += ["当前没有足够依据生成可执行建议；已知内容与覆盖缺口仍保留。", ""]
     for number, action in enumerate(result["actions"], 1):
         lines.append(str(number) + ". " + literal(action["label"]))
         basis = "；".join(cite(f) for f in action["basis"]) if isinstance(action["basis"], list) else literal(action["basis"])
         lines += ["   - 依据：" + basis, "   - 第一步：" + literal(action["first_step"]),
                   "   - 需要确认的条件：" + literal(action["confirmation_condition"])]
+        if action["kind"] == "recommendation":
+            if action["state_check"] == "not_assessed":
+                lines.append("   - 项目状态：未核（旧格式）；执行前需核适用项目、当前状态与允许动作。")
+            elif action["state_check"] == "not_applicable":
+                lines.append("   - 适用范围：一般建议；调用者标注不推进已有项目。")
+            else:
+                context = action["project_context"]
+                lines.append("   - 项目状态：" + literal(context["status"]) + "；动作：" + literal(context["action_type"])
+                             + "（来源：" + "、".join(literal(s) for s in context["source_ids"])
+                             + "；只核标注结构，原话含义仍需审核）")
+                if "restart_authorization" in context:
+                    lines.append("   - 本次重启授权来源：" + literal(context["restart_authorization"]["source_id"]))
         if action["kind"] == "information_action":
             lines += ["   - 提供什么：" + literal(action["what"]), "   - 为什么：" + literal(action["why"]),
                       "   - 怎么提供：" + literal(action["how"])]
+    lines += advice
     lines += ["", "## 覆盖缺口", ""]
     lines += ["- " + literal(s) for s in result["coverage_gaps"]] or ["- 本次未提供覆盖说明，不能推断全量已读。"]
     if result["unresolved_keys"]:

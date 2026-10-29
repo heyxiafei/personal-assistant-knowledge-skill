@@ -46,11 +46,18 @@ def install(dest):
     parent, target = destination(dest)
     if target.exists():
         raise ValueError("skill already exists; refusing overwrite; keep edits and uninstall explicitly")
+    if any(p.is_symlink() for p in [SOURCE, *SOURCE.parents]):
+        raise ValueError("symlink source root or ancestor is not supported")
+    # Check source links before copying, when their identity is still visible.
+    digest_tree(SOURCE)
     parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".personal-context-install-", dir=parent))
     try:
         skill = stage / NAME
-        shutil.copytree(SOURCE, skill, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        # Preserve any links introduced after preflight so stage validation
+        # rejects them without dereferencing files outside the source package.
+        shutil.copytree(SOURCE, skill, symlinks=True,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         manifest = digest_tree(skill)
         (skill / MARKER).write_text(json.dumps({"name": NAME, "files": manifest}, sort_keys=True))
         # Reserve the target with mkdir so a concurrent install cannot be replaced.
@@ -63,7 +70,19 @@ def install(dest):
             raise ValueError("partial install retained; inspect destination before retrying")
     finally:
         shutil.rmtree(stage)
-    return {"status": "installed", "skill": NAME, "files": len(manifest)}
+    return {"status": "installed", "skill": NAME, "files": len(manifest),
+            "core_status": "incomplete", "history_collected": False,
+            "memory_transferred_to_codex": False,
+            "next_step": {"action": "review_core_intake_plan",
+                          "argv": [sys.executable, "-B",
+                                   str(target / "scripts/core_intake.py"), "plan"],
+                          "guide": str(target / "references/core-intake.md")},
+            "first_use": {"action": "agent_starts_onboarding_after_install",
+                          "script": str(target / "scripts/onboarding.py"),
+                          "init_argv_template": [sys.executable, "-B", str(target / "scripts/onboarding.py"),
+                                                 "--state", "<PRIVATE_STATE>", "init"],
+                          "guide": str(target / "references/onboarding.md"),
+                          "automatic_install_hook": False}}
 
 
 def uninstall(dest):
