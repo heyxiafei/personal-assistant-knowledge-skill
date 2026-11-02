@@ -62,6 +62,35 @@ class OnboardingTests(unittest.TestCase):
             self.assertEqual(m.ingest(filled,data('existing')),filled)
             self.assertEqual(m.preview(filled)['core_status'],'incomplete')
 
+    def test_new_coverage_gap_invalidates_reviewed_advice_without_reasking(self):
+        original = data('all_known')
+        state = m.start(original)
+        state = m.submit(state, event_id='review', responses=[], source_id_value='synthetic-user',
+            tradeoff_suggestion='先完成合成演示，再扩展范围',
+            recommendations=[dict(label='先整理合成演示', basis_keys=['near_term_goal'],
+                first_step='写出一页提纲', confirmation_condition='仅建议', scope='general')])
+        incoming = copy.deepcopy(original)
+        incoming['coverage_gaps'].append('新增缺口：附件中的约束未读取')
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d).resolve() / 'state.json'
+            digest = m.save(path, state)
+            updated = m.ingest(state, incoming)
+            self.assertIsNone(updated['tradeoff_suggestion'])
+            self.assertEqual(updated['session']['data']['recommendations'], [])
+            self.assertTrue(updated['library']['deeper_guidance']['needs_agent_review'])
+            self.assertEqual(updated['session']['data']['claims'], state['session']['data']['claims'])
+            self.assertIsNone(m.next_gap(updated))
+            m.save(path, updated, previous=state, expected_hash=digest)
+            restored, _ = m.load(path)
+            self.assertEqual(m.ingest(restored, incoming), restored)
+            self.assertIsNone(m.preview(restored)['next_question'])
+
+    def test_unchanged_coverage_preserves_reviewed_advice(self):
+        original = data('all_known')
+        state = m.submit(m.start(original), event_id='review', responses=[],
+            source_id_value='synthetic-user', tradeoff_suggestion='合成已审阅取舍')
+        self.assertEqual(m.ingest(state, original), state)
+
     def test_delegation_text_is_not_direct_user_evidence(self):
         with tempfile.TemporaryDirectory() as d:
             idx=Path(d).resolve()/'index.sqlite3'; result=make_index(idx)

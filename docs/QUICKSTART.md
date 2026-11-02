@@ -1,5 +1,7 @@
 # 个人助手 Skill：首次上手
 
+首次安装并开始使用，请复制 [README「复制这一句到 Codex」](../README.md#复制这一句到-codex) 中的完整指令；该入口由 Agent 先解析并记录 main 的完整 SHA、固定该提交安装，再接续首次初始化；不会安装未发布候选。下面是详细步骤及已安装后的补充使用提示。
+
 先按 [安装与恢复](INSTALL.md) 选择实际已发布并审阅的提交 SHA，并安装到明确的项目级或用户级目录；也可直接使用该 SHA 的源码。需要 Python 3.9+。安装只复制通用 Skill，不读取账户或开始访谈；已有同名目录会停止并保留旧版。
 
 显式读取所选安装目录的 `maintain-personal-context/SKILL.md`，或源码中的 `skills/maintain-personal-context/SKILL.md`，确认正在使用的目录与版本。首次调用按 [连续上手流程](../skills/maintain-personal-context/references/onboarding.md) 先建立私人骨架，再自动发现并读取已获准资料填充同一库；给出初步建议和选填表，用户填写或跳过后更新并深入建议。资料位置或权限缺失时再问。用户也可以发送：
@@ -47,3 +49,7 @@ python3 -B skills/maintain-personal-context/scripts/quick_start.py \
 已授权保存可复用快照时，可让助手把实际已读来源和当前标注导出为私人会话包：`session.json`、五视图`result.md`和本地`session.html`。页面逐题提供选项与自由输入；未答保持空白，跳过、不确定和不保存不会伪装成事实。刷新前需显式下载回答，下载及读取成功都不代表已入正式库。浏览器须允许本地HTML，未实际打开时保留视觉/点击未验说明。
 
 新会话先读取安装版Skill，再提供包路径和上次交付的`bundle_digest`；使用`session_bundle.py read --bundle 私人包路径 --expect-digest 上次值`校验后承接事实、来源边界与未答项。已有回答文件另按同一版本核验，由助手审核后承接，不假装重新问过或重新确认。旧包不包含新的保存授权，不重启暂停或取消项目。手改造成摘要不符时保留文件，核对后另导出新版本。旧离线包保持最多四题的原格式，不把快速入门八题直接作为旧包输入。实际 schema 和完整命令见 [会话包说明](../skills/maintain-personal-context/references/session-reuse.md)。
+
+## 可选查看关系图或迁移
+
+完成本轮建库和补充后，可要求“将当前获准知识库导出为离线关系图与 Markdown 双链目录”。先明确私人导出位置，按 [关系图说明](../skills/maintain-personal-context/references/knowledge-graph.md) 输出新版本目录；不把图谱作为使用前提，不安装 Obsidian，不更新旧导出或自动同步。

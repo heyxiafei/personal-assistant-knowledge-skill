@@ -4,9 +4,27 @@
 
 完成初步上手后，可选 [四领域反思](skills/maintain-personal-context/references/guided-exploration.md)（心智、身体精力、价值关系意义、事业资源）、基于证据的盲点线索或逐题深访；均可跳过，不做强制测评或人格诊断。
 
-本目录是基于 **revision014**（`a1c8f2f4216a4af21d0ae809ca0d7470f204a5bb`）的 **revision016 四步上手预览版**。必须满足的三项核心是：安装后完整读取 ChatGPT 历史、完整读取 Codex 历史、Codex 获得 ChatGPT 个人记忆。当前三项整体仍未完成，不能以访谈、搜索摘要或合成测试替代。新候选提供官方导出导入器、官方 app-server 采集器及安装后核心引导；实际可用范围与阻塞见 [核心入口与验收](docs/CORE_INTAKE_ACCEPTANCE.md)。
+本目录是基于 **revision014**（`a1c8f2f4216a4af21d0ae809ca0d7470f204a5bb`）的 **revision017 四步上手与离线图谱预览版**。必须满足的三项核心是：安装后完整读取 ChatGPT 历史、完整读取 Codex 历史、Codex 获得 ChatGPT 个人记忆。当前三项整体仍未完成，不能以访谈、搜索摘要或合成测试替代。新候选提供官方导出导入器、官方 app-server 采集器及安装后核心引导；实际可用范围与阻塞见 [核心入口与验收](docs/CORE_INTAKE_ACCEPTANCE.md)。
 
 “完整”仅限当前账号、明确约定主机及截止时点仍保留的历史。附件正文、原始消息、分页枚举和记忆传递分别核对；不承诺恢复已删除或临时聊天。真实原文、记忆与采集状态只能写入明确指定的私人位置，不能进入本仓库或已安装 Skill。
+
+## 复制这一句到 Codex
+
+在支持本地 Skill 的 Codex 对话中发送：
+
+```text
+请按 https://github.com/heyxiafei/personal-assistant-knowledge-skill 的使用说明安装并启动个人知识库助手，先解析并记录 main 当前的完整提交 SHA，再固定该提交安装，保留已有安装和知识库，安装后加载实际安装目录的 SKILL.md，在已授权的私人位置先建空白知识库骨架，再读取获准资料填充，给出初步建议和选填表，并在我补充或跳过后继续整理和深入建议。
+```
+
+此入口使用原仓库作为长期地址，每次安装先解析 `main`，记录完整 40 位 SHA，再检出并核对该 SHA，后续安装只使用这份固定源码，不在执行途中重新跟随 `main`。解析、检出或核对失败时停止并说明，不猜测版本。安装器只复制本地源码，这一步由 Agent 按 [安装与恢复](docs/INSTALL.md) 执行；它不是新增的自动更新功能。未发布的本地候选不会通过此入口安装。
+
+历史固定版：[revision016-four-step-preview · 3241d42](https://github.com/heyxiafei/personal-assistant-knowledge-skill/tree/3241d42ee7330e23bbaac97e68d54bc2bb07312c)，供明确需要旧版时使用，不包含后续修复。
+
+这是让 Agent 串联“安装并首次调用”的请求，不是安装器自动运行钩子。需要 Python 3.9+ 及宿主实际支持本地 Skill；若宿主不能在当前对话接续加载，按其返回的下一步继续。同名安装拒绝覆盖，已有库和手工内容先核对并保留；安装位置、私人存放位置或资料范围不明确时，只补问必要信息，不把这句话视为读取整个账号或覆盖旧库的授权。没有可读历史也可先建空库；云端安装不自动获得本机资料，完整 Codex／ChatGPT 历史和 Memory 仍未验收。
+
+## 可选：关系图与可迁移数据
+
+建库后可说：“把当前获准的知识库导出为离线关系图和 Markdown 双链目录。”按 [关系图使用说明](skills/maintain-personal-context/references/knowledge-graph.md) 选择私人新版本目录，输出可搜索、筛选、查看局部关系和证据的 HTML、graph.json 及 vault；以后可自行用 Obsidian 打开 vault，无需现在安装。仅展示显式引用，不随机补线、不上传、不自动同步，原库和手改保留。大图绘制上限与完整列表、时效核对及隐私边界见说明。
 
 ## 安装后的核心入口
 

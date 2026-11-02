@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>私人证据关系图</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui;background:#11181e;color:#e6eded}body{margin:0;padding:24px}h1{font-size:25px;margin:0 0 8px}p{color:#a9bbc7}header{max-width:1100px;margin:auto}input,select,button{font:inherit;color:inherit;background:#243440;border:1px solid #476170;border-radius:6px;padding:8px}button{cursor:pointer}label{display:inline-block;margin:4px 12px 4px 0}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:16px;margin:16px auto;max-width:1300px}section,aside{border:1px solid #344650;border-radius:12px;padding:16px;background:#16232c}svg{width:100%;height:480px;display:block;background:radial-gradient(ellipse,#203340,#16232c);border-radius:8px}line{stroke:#58707c;stroke-width:1.5}circle{stroke:#e1efee;stroke-width:1.5;cursor:pointer}svg text{fill:#d7e6eb;font-size:11px;pointer-events:none}.selected{stroke:#fff;stroke-width:4}ul{padding-left:18px;max-height:260px;overflow:auto}li{margin:8px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 system-ui}#summary,#freshness{font-size:13px}#details{min-height:200px}#empty{padding:20px;color:#a9bbc7}button:focus,input:focus,select:focus{outline:2px solid #8cd4c8}#list button{max-width:100%;text-align:left;overflow-wrap:anywhere}.muted{color:#a9bbc7}@media(max-width:800px){.layout{grid-template-columns:1fr}body{padding:12px}svg{height:340px}}
+</style></head><body>
+<header><h1>私人证据关系图</h1><p>每条连线来自显式引用。图谱只是快照，不证明全量历史已读取，也不会执行建议。</p>
+<label>搜索 <input id="search" type="search" placeholder="标题、内容或来源定位"></label>
+<label>类型 <select id="type"><option value="all">全部</option><option value="claim">事实／待核陈述</option><option value="source">来源</option><option value="advice">条件建议</option></select></label>
+<label><input id="local" type="checkbox">只看选中节点的一跳关系</label><button id="reset">重置筛选</button>
+<p id="summary"></p><p id="freshness">时效未核：不会自动读取原库；可选择原始 JSON 在本机核对摘要。</p>
+<label>核对原库文件（不上传） <input id="source-file" type="file" accept=".json,application/json"></label></header>
+<main class="layout"><section><svg id="graph" viewBox="0 0 900 500" role="img" aria-label="显式证据关系图"></svg><div id="empty" hidden>没有匹配节点。空库可以稍后补充，已有孤立节点仍会显示。</div><h2>节点列表</h2><p class="muted">列表是完整的可访问回退；大图仅绘制前 200 个匹配节点。</p><ul id="list"></ul></section>
+<aside><h2>证据与定位</h2><div id="details">选择一个节点查看来源、时间与状态。</div><h3>覆盖限制</h3><ul id="limits"></ul></aside></main>
+<script>
+'use strict';
+const raw='__GRAPH_BASE64__';
+const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(raw),c=>c.charCodeAt(0))));
+const $=id=>document.getElementById(id), ns='http://www.w3.org/2000/svg';
+const nodes=new Map(data.nodes.map(n=>[n.id,n]));let selected=null;
+function element(tag,attrs){const el=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs||{}))el.setAttribute(k,v);return el;}
+function choose(id){selected=id;const n=nodes.get(id);$('details').replaceChildren();const title=document.createElement('h3');title.textContent=n.label;const pre=document.createElement('pre');pre.textContent=JSON.stringify(n,null,2);$('details').append(title,pre);const ul=document.createElement('ul');for(const e of data.edges.filter(e=>e.source===id||e.target===id)){const other=e.source===id?e.target:e.source;const li=document.createElement('li');const b=document.createElement('button');b.textContent=e.type+' → '+nodes.get(other).label;b.onclick=()=>choose(other);li.append(b);ul.append(li);}$('details').append(ul);render();}
+function render(){
+ const query=$('search').value.toLocaleLowerCase(),type=$('type').value;
+ const adjacent=new Set([selected]);if(selected)for(const e of data.edges){if(e.source===selected)adjacent.add(e.target);if(e.target===selected)adjacent.add(e.source);}
+ const visible=data.nodes.filter(n=>(type==='all'||n.type===type)&&JSON.stringify(n).toLocaleLowerCase().includes(query)&&(!$('local').checked||!selected||adjacent.has(n.id)));
+ const visibleIds=new Set(visible.map(n=>n.id));const links=data.edges.filter(e=>visibleIds.has(e.source)&&visibleIds.has(e.target));
+ $('summary').textContent=visible.length+' / '+data.nodes.length+' 个节点 · '+links.length+' 条显式关系 · 来源 '+data.source_sha256.slice(0,12);
+ $('list').replaceChildren();for(const n of visible){const li=document.createElement('li'),b=document.createElement('button');b.textContent=n.type+' · '+n.label+' ['+n.status+']';b.onclick=()=>choose(n.id);li.append(b);$('list').append(li);}
+ const svg=$('graph');svg.replaceChildren();$('empty').hidden=visible.length!==0;
+ const drawn=visible.slice(0,200),ids=new Set(drawn.map(n=>n.id)),drawEdges=links.filter(e=>ids.has(e.source)&&ids.has(e.target));
+ // Deterministic layout. Forces position existing edges; they never create edges.
+ const pos=new Map(drawn.map((n,i)=>[n.id,{x:450+180*Math.cos(i*2*Math.PI/Math.max(1,drawn.length)),y:250+170*Math.sin(i*2*Math.PI/Math.max(1,drawn.length))}]));
+ for(let step=0;step<75;step++){const delta=new Map(drawn.map(n=>[n.id,{x:0,y:0}]));for(let i=0;i<drawn.length;i++)for(let j=i+1;j<drawn.length;j++){const a=pos.get(drawn[i].id),b=pos.get(drawn[j].id),dx=a.x-b.x,dy=a.y-b.y,d=Math.max(25,dx*dx+dy*dy),f=Math.min(4,900/d);delta.get(drawn[i].id).x+=dx*f/Math.sqrt(d);delta.get(drawn[i].id).y+=dy*f/Math.sqrt(d);delta.get(drawn[j].id).x-=dx*f/Math.sqrt(d);delta.get(drawn[j].id).y-=dy*f/Math.sqrt(d);}
+ for(const e of drawEdges){const a=pos.get(e.source),b=pos.get(e.target),dx=b.x-a.x,dy=b.y-a.y;delta.get(e.source).x+=dx*.018;delta.get(e.source).y+=dy*.018;delta.get(e.target).x-=dx*.018;delta.get(e.target).y-=dy*.018;}
+ for(const n of drawn){const p=pos.get(n.id),d=delta.get(n.id);p.x=Math.max(35,Math.min(865,p.x+d.x));p.y=Math.max(35,Math.min(465,p.y+d.y));}}
+ for(const e of drawEdges){const a=pos.get(e.source),b=pos.get(e.target);const l=element('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y});const t=element('title');t.textContent=e.type;l.append(t);svg.append(l);}
+ for(const n of drawn){const p=pos.get(n.id),g=element('g'),circle=element('circle',{cx:p.x,cy:p.y,r:8,fill:{claim:'#7ac9b7',source:'#86aada',advice:'#e7bc7f'}[n.type],tabindex:0,role:'button','aria-label':n.label});if(n.id===selected)circle.classList.add('selected');circle.onclick=()=>choose(n.id);circle.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose(n.id);}};const title=element('title');title.textContent=n.label;circle.append(title);const label=element('text',{x:p.x+12,y:p.y+4});label.textContent=n.label.slice(0,18);g.append(circle,label);svg.append(g);}
+}
+for(const id of ['search','type','local'])$(id).addEventListener(id==='search'?'input':'change',render);
+$('reset').onclick=()=>{$('search').value='';$('type').value='all';$('local').checked=false;render();};
+for(const limit of data.coverage_limits){const li=document.createElement('li');li.textContent=limit;$('limits').append(li);}
+$('source-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(!globalThis.crypto?.subtle)throw Error('此浏览器不支持本地摘要计算，请使用 CLI check');const sha=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),v=>v.toString(16).padStart(2,'0')).join('');$('freshness').textContent=sha===data.source_sha256?'摘要一致：与所选原库文件相同；不代表全账户完整。':'快照已过期／所选原库不同：保留此快照，重新导出新版本。';}catch(err){$('freshness').textContent='未完成核对：'+err.message;}};
+render();
+</script></body></html>

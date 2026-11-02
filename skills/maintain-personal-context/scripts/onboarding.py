@@ -189,8 +189,9 @@ def ingest(state, data, *, source_index=None):
     session['data'][quick_start.META]['confirmed_sources'] = previously_confirmed
     # Never replace a user's later reviewed advice with an older source scan.
     # Changed evidence invalidates advice until the Agent reviews it again.
-    evidence_changed = bool(session.get('advice_needs_refresh')) or (
-        session['data']['source_review'] != state['session']['data']['source_review'])
+    evidence_changed = bool(session.get('advice_needs_refresh')) or any(
+        session['data'][key] != state['session']['data'][key]
+        for key in ('source_review', 'coverage_gaps'))
     if state.get('user_submitted', False):
         if evidence_changed:
             session = interview.set_advice(session, [])

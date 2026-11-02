@@ -55,6 +55,15 @@ def main():
                 raise RuntimeError("four domains must be available without user data")
             if mode == "deep_interview" and view.get("question_count", 0) > 1:
                 raise RuntimeError("deep interview must offer at most one question")
+        graph_script = installed / "scripts/knowledge_graph.py"
+        graph_receipt = json.loads(run(graph_script, "--source", state_path, "export",
+                                      "--parent", root, "--name", "synthetic-graph-v1", cwd=root))
+        if graph_receipt["nodes"] != 0 or graph_receipt["edges"] != 0:
+            raise RuntimeError("empty library graph invented nodes")
+        graph_check = json.loads(run(graph_script, "--source", state_path, "check",
+                                    "--directory", root / "synthetic-graph-v1", cwd=root))
+        if graph_check["status"] != "current" or state_path.read_bytes() != initial_bytes:
+            raise RuntimeError("graph export changed source or has stale digest")
         original = install.digest_tree(installed)
         if original != install.digest_tree(install.SOURCE):
             raise RuntimeError("installed runtime differs from reviewed source")
@@ -100,7 +109,7 @@ else:raise AssertionError("installed Skill accepted private state")
         if (second / install.NAME).exists() or install.digest_tree(Path(recovered["recoverable_folder"])) != original:
             raise RuntimeError("uninstall did not preserve a recoverable copy")
     print(json.dumps({"status": "passed", "runtime_files": receipt["files"],
-                      "checks": ["runtime hashes", "installed empty skeleton and idempotent resume", "installed optional exploration", "installed three-source core plan",
+                      "checks": ["runtime hashes", "installed empty skeleton and idempotent resume", "installed offline graph export and digest check", "installed optional exploration", "installed three-source core plan",
                                  "installed CLI: four synthetic cases",
                                  "installed pause/checkpoint/resume", "private-state isolation",
                                  "duplicate install refusal", "manual edit protection", "recoverable uninstall"],

@@ -21,6 +21,8 @@ def check():
     errors, count = [], 0
     required = [
         ROOT / "LICENSE", ROOT / "README.md", ROOT / "docs/TEST_REPORT.md",
+        SKILL / "scripts/knowledge_graph.py", SKILL / "assets/knowledge-graph.html",
+        SKILL / "references/knowledge-graph.md", ROOT / "tests/test_knowledge_graph.py",
         ROOT / "docs/REVIEW_GUIDE.md", SKILL / "SKILL.md",
         SKILL / "agents/openai.yaml", SKILL / "assets/templates/PERSON_PROFILE.md",
         SKILL / "assets/templates/DAILY_LOG.md", SKILL / "assets/templates/LONG_TERM.md",

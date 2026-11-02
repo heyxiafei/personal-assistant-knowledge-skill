@@ -4,14 +4,16 @@
 
 ## 选择并固定提交
 
-本版为四步上手预览，三项真实核心尚未完成。先从原仓库核对欲安装的提交及可用 CI，复制其完整 40 位 SHA；旧 revision014 不包含本版新增功能。以下占位值须替换为实际审阅的 SHA：
+本版为四步上手预览，三项真实核心尚未完成。先从原仓库核对欲安装的提交及可用 CI，记录其完整 40 位 SHA；旧 revision014 不包含本版新增功能。README 的一句话入口使用以下流程：从本次克隆取得的远端 main 解析 SHA，固定源码后再安装，不在安装途中重新解析分支。需要历史版时，明确把 CONTEXT_SKILL_REV 设为已核对的完整 SHA。
 
 ```sh
 git clone https://github.com/heyxiafei/personal-assistant-knowledge-skill.git
 cd personal-assistant-knowledge-skill
-CONTEXT_SKILL_REV="REPLACE_WITH_REVIEWED_40_CHARACTER_COMMIT_SHA"
+CONTEXT_SKILL_REV="$(git rev-parse --verify 'origin/main^{commit}')" || exit 1
+printf 'Selected commit: %s\n' "$CONTEXT_SKILL_REV"
 git fetch origin "$CONTEXT_SKILL_REV"
-git checkout --detach "$CONTEXT_SKILL_REV"
+git checkout --detach "$CONTEXT_SKILL_REV" || exit 1
+test "$(git rev-parse HEAD)" = "$CONTEXT_SKILL_REV" || exit 1
 git rev-parse HEAD
 python3 --version
 python3 -B scripts/check_package.py
